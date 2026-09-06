@@ -5,10 +5,24 @@ extends SceneTree
 var field: TestField
 var failures: int = 0
 var checks: int = 0
+var _deadline_msec: int = 0
 
 
 func _initialize() -> void:
-	_run.call_deferred()
+	_deadline_msec = Time.get_ticks_msec() + 180000
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	if OS.get_cmdline_user_args().has("--verify-timeout"):
+		_deadline_msec = Time.get_ticks_msec() + 50
+	else:
+		_run.call_deferred()
+
+
+func _process(_delta: float) -> bool:
+	if Time.get_ticks_msec() > _deadline_msec:
+		push_error("TEST_TIMEOUT: runner exceeded wall-clock deadline")
+		quit(2)
+	return false
 
 
 func _run() -> void:
@@ -206,13 +220,8 @@ func _movement_checks() -> void:
 			print("ARRIVAL_DETAIL: id=", unit.unit_id, " position=", unit.global_position, " target=", unit.assigned_destination, " moving=", unit.moving, " velocity=", unit.velocity, " path=", unit.agent.get_current_navigation_path())
 		_check(not unit.moving and distance <= unit.stopping_distance + 0.01, "unit %02d arrives within stop distance (%.3f)" % [unit.unit_id, distance])
 		arrived = arrived and not unit.moving
-	var parked: Array[Vector3] = []
-	for unit in field.units:
-		parked.append(unit.global_position)
-	await _frames(180)
-	var stable := arrived
-	for i in field.units.size():
-		stable = stable and field.units[i].global_position.distance_to(parked[i]) < 0.001
+	var stationary := await _sample_stationary(field.units, 180)
+	var stable: bool = arrived and stationary["stable"]
 	_check(stable, "arrived group remains still for three seconds")
 	var previous := field.last_command_slots.duplicate()
 	await _click(_world_screen(Vector3(-8, 2, -1)), MOUSE_BUTTON_RIGHT)
@@ -242,6 +251,24 @@ func _movement_checks() -> void:
 	field.units[11].queue_free()
 	await _frames(3)
 	_check(field.selection.selected_units().size() == 11, "freed selected unit is pruned safely")
+
+
+func _sample_stationary(units: Array[RTSUnit], frames: int) -> Dictionary:
+	var anchors := PackedVector3Array()
+	for unit in units:
+		anchors.append(unit.global_position)
+	var stable := true
+	var maximum: float = 0.0
+	for frame in frames:
+		await physics_frame
+		for i in units.size():
+			var unit := units[i]
+			if not is_instance_valid(unit):
+				stable = false
+				continue
+			maximum = maxf(maximum, unit.global_position.distance_to(anchors[i]))
+			stable = stable and not unit.moving and unit.movement_state == RTSUnit.MovementState.ARRIVED and unit.velocity.length() < 0.001
+	return {"stable": stable and maximum < 0.001, "max_displacement": maximum}
 
 
 func _frames(count: int) -> void:

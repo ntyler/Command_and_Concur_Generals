@@ -24,6 +24,7 @@ select_units={"deadzone":0.2,"events":[Object(InputEventMouseButton,"button_inde
 command_move={"deadzone":0.2,"events":[Object(InputEventMouseButton,"button_index":2)]}
 selection_modifier={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194325)]}
 cancel_selection={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194305)]}
+movement_debug={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194334)]}
 
 [layer_names]
 3d_physics/layer_1="Terrain"

@@ -8,6 +8,7 @@ signal move_requested(destination: Vector3)
 @export var drag_threshold: float = 6.0
 
 var camera_rig: RTSCamera
+var gameplay_field: TestField
 var selection_box: ReferenceRect
 var _selected: Array[RTSUnit] = []
 var _press_position: Vector2
@@ -89,7 +90,7 @@ func _physics_process(_delta: float) -> void:
 
 func select_clicked(unit: RTSUnit, additive: bool) -> void:
 	_prune_selection()
-	if unit == null or unit.owner_id != friendly_owner_id:
+	if not _can_select(unit):
 		if not additive:
 			_clear()
 	elif additive and _selected.has(unit):
@@ -106,9 +107,8 @@ func select_rectangle(rectangle: Rect2, additive: bool) -> void:
 	if not additive:
 		_clear()
 	var normalized := rectangle.abs()
-	for node in get_tree().get_nodes_in_group("controllable_units"):
-		var unit := node as RTSUnit
-		if unit == null or unit.owner_id != friendly_owner_id:
+	for unit in gameplay_field.units:
+		if not _can_select(unit):
 			continue
 		var anchor := unit.selection_anchor.global_position
 		if camera_rig.camera.is_position_behind(anchor):
@@ -143,15 +143,29 @@ func _clear() -> void:
 
 
 func _add(unit: RTSUnit) -> void:
-	if not _selected.has(unit):
+	if _can_select(unit) and not _selected.has(unit):
 		_selected.append(unit)
 		unit.set_selected(true)
+
+
+func _can_select(unit: RTSUnit) -> bool:
+	return is_instance_valid(gameplay_field) and gameplay_field.contains_unit(unit) and unit.owner_id == friendly_owner_id
+
+
+func forget_unit(unit: RTSUnit) -> void:
+	if _selected.has(unit):
+		_selected.erase(unit)
+		if is_instance_valid(unit):
+			unit.set_selected(false)
+		selection_changed.emit(_selected.size())
 
 
 func _prune_selection() -> void:
 	var count := _selected.size()
 	for i in range(_selected.size() - 1, -1, -1):
-		if not is_instance_valid(_selected[i]):
+		if not _can_select(_selected[i]):
+			if is_instance_valid(_selected[i]):
+				_selected[i].set_selected(false)
 			_selected.remove_at(i)
 	if count != _selected.size():
 		selection_changed.emit(_selected.size())
