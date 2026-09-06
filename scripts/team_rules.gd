@@ -16,7 +16,7 @@ static func is_hostile_target(field: TestField, source_team: int, target: RTSUni
 
 
 static func can_attack(field: TestField, source: RTSUnit, target: RTSUnit) -> bool:
-	return is_combat_member(field, source) and is_hostile_target(field, source.owner_id, target)
+	return is_combat_member(field, source) and is_instance_valid(source.combat.weapon) and is_hostile_target(field, source.owner_id, target)
 
 
 static func damage_target(field: TestField, source_team: int, target: RTSUnit, amount: float, source: RTSUnit = null) -> float:

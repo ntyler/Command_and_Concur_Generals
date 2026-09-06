@@ -26,6 +26,8 @@ static func body_shape() -> CapsuleShape3D:
 signal availability_changed
 @export_group("Combat (optional)")
 @export var combat_weapon: WeaponDefinition
+@export var damageable: bool = false
+@export var unit_display_name: String = "Unit"
 @export var maximum_health: float = 100.0
 @export var retaliation_enabled: bool = false
 var combat: CombatController
@@ -103,11 +105,7 @@ func _ready() -> void:
 	add_child(collider)
 	_visual = Node3D.new()
 	add_child(_visual)
-	_add_box(Vector3(0.85, 0.45, 1.1), Vector3(0, 0.52, 0), Color("42c5cc"))
-	_add_box(Vector3(0.55, 0.22, 0.55), Vector3(0, 0.85, 0.1), Color("b3e7df"))
-	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(-0.5, 0.28, 0), Color("263c49"))
-	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(0.5, 0.28, 0), Color("263c49"))
-	_add_box(Vector3(0.48, 0.09, 0.15), Vector3(0, 0.8, -0.42), Color("ffd680"))
+	_build_visual()
 	selection_anchor = Marker3D.new()
 	selection_anchor.position.y = 0.6
 	add_child(selection_anchor)
@@ -153,13 +151,21 @@ func _ready() -> void:
 	debug_label.no_depth_test = true
 	add_child(debug_label)
 	set_movement_debug(false)
-	if combat_weapon != null:
+	if combat_weapon != null or damageable:
 		combat = CombatController.new()
 		combat.unit = self
 		combat.retaliation_enabled = retaliation_enabled
 		add_child(combat)
-		if combat_weapon.mode == WeaponDefinition.Mode.HITSCAN:
+		if combat_weapon != null and combat_weapon.mode == WeaponDefinition.Mode.HITSCAN:
 			_visual.scale = Vector3(0.65, 1.2, 0.65)
+
+
+func _build_visual() -> void:
+	_add_box(Vector3(0.85, 0.45, 1.1), Vector3(0, 0.52, 0), Color("42c5cc"))
+	_add_box(Vector3(0.55, 0.22, 0.55), Vector3(0, 0.85, 0.1), Color("b3e7df"))
+	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(-0.5, 0.28, 0), Color("263c49"))
+	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(0.5, 0.28, 0), Color("263c49"))
+	_add_box(Vector3(0.48, 0.09, 0.15), Vector3(0, 0.8, -0.42), Color("ffd680"))
 
 
 func set_selected(selected: bool) -> void:
@@ -214,7 +220,7 @@ func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
 	destination_indicator.visible = show_destination and movement_debug
 	# Listeners may synchronously replace this order. Do not write after emission.
 	_set_state(MovementState.TRAVELLING)
-	if combat_version >= 0 and order_version == moving_order:
+	if is_instance_valid(self) and combat_version >= 0 and order_version == moving_order:
 		combat.publish_state(combat_version)
 	return true
 

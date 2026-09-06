@@ -1,6 +1,6 @@
 # Fieldwork — RTS prototype
 
-An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production.
+An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production. Milestone 4 adds finite supplies, two preplaced unarmed Collector Trucks, automatic deposits and harvesting-funded production.
 
 Open `project.godot` in Godot and press **F6** with `scenes/test_field.tscn` open, or **F5** to run the configured main scene. There is no asset download, plugin installation, navigation bake, or build step. The field and its navigation mesh are generated together at scene startup.
 
@@ -37,6 +37,10 @@ To play production, open `scenes/production_test.tscn` and press **F6**, or run 
 
 Each owner starts with **1000 integer credits**. A Rifle costs **100**, takes **5 simulated seconds**, and occupies one of **5 queue slots**, including the active or completed-but-blocked job. Barracks sharing an owner use the same field-local balance. Training is FIFO, one active job per barracks. Cancel any undeployed job for its original full payment exactly once. A blocked exit holds the head at 100%, displays **Exit blocked**, and retries every **0.25 simulated seconds** without charging again or training later jobs. Six bounded local candidates must pass navigation and full Rifle-capsule clearance. Deployment removes the job before completion callbacks; subsequent unit death or rally rejection cannot refund it. See [Milestone 3](docs/milestone-3.md) for lifecycle details and validation.
 
+To play harvesting, open `scenes/harvesting_test.tscn` and press **F6**, or run `& $godot --path . res://scenes/harvesting_test.tscn`. Select one or both western Collector Trucks, then right-click a yellow supply cache. Each cache begins with **2000 supplies**. Collectors carry **100**, load **25 per completed simulated second**, return to the existing owned headquarters and unload for **one simulated second**. Each deposited supply adds **one credit to the existing production balance**. They repeat trips to that cache until it empties, including a final partial load. Select your barracks and spend those credits on normal Rifle production, rally and combat.
+
+Ground Move and **X Stop** cancel harvesting immediately while preserving cargo. Right-click an owned HQ with cargo to deposit once and idle. A new cache assignment preserves cargo; a full collector deposits before going to the new cache. Rejected commands preserve existing work. Mixed selections dispatch only to eligible collectors and report partial acceptance; combat units keep their orders. Death loses undeposited cargo. Missing HQ or blocked access retains cargo and requires a new command. Empty caches remain as static obstacles. Cargo/activity and the assigned cache's remaining amount appear only for selected collectors; the existing credit and production panel is reused. Collectors have 150 health, move at 4 units/s with the unchanged crowd/recovery settings, and cannot fire or be produced. See [Milestone 4](docs/milestone-4.md) for transfer, lifecycle, validation and pre-existing stress-test evidence.
+
 ## Controls
 
 | Input | Behavior |
@@ -51,13 +55,15 @@ Each owner starts with **1000 integer credits**. A Rifle costs **100**, takes **
 | Shift + drag | Add enclosed units without clearing others |
 | Right click ground | Replace selected units' move orders with distinct destinations |
 | Right click a living hostile unit | Attack with selected combat units; friendly clicks issue no attack |
-| X | Stop selected units' movement and combat; S remains camera pan |
+| X | Stop selected units' movement, combat and harvesting; retain loaded cargo; S remains camera pan |
 | Escape | Cancel the current selection gesture |
 | F3 | Toggle movement debugging and combat firing lines |
 | T (line-of-fire scene only) | Move the marked rocket target into/out of the wall shadow |
 | Click or Shift-click an owned building (production scene) | Select that building alone and clear unit selection |
 | Right click ground with barracks selected | Set rally for future deployments; preserve current units' orders |
 | Train / Cancel in barracks panel | Enqueue a paid Rifle / refund that undeployed job |
+| Right click supply with collectors selected (harvesting scene) | Begin or replace automatic harvesting |
+| Right click owned HQ with loaded collectors selected | Return and deposit once, then idle |
 
 The controls panel consumes pointer input and suspends camera movement while hovered. X still stops selected units over this passive panel; a focused UI control that consumes X keeps the event. Releasing a drag over it cancels the gesture. Losing application focus or leaving the window also cancels a drag. Shift is sampled when a selection gesture begins. Shift-clicking empty ground preserves selection. Clicks on obstacles or beyond the ground issue no move order; ground points near the boundary are projected onto navigation.
 
@@ -115,6 +121,10 @@ Attempted travel is clipped to both target aim and remaining lifetime. An alread
 | `scripts/player_credits.gd`, `scripts/unit_production.gd`, `scripts/production_result.gd` | Field-local funds, isolated FIFO jobs, captured refunds and explicit acceptance |
 | `scripts/production_definition.gd`, `production/rifle.tres`, `scenes/rifle_unit.tscn` | Shared recipe and the existing Rifle configuration; no mutable jobs in Resources |
 | `scripts/production_panel.gd`, `tests/production_checks.gd` | Minimal GUI and production, input, lifecycle and combat integration checks |
+| `scripts/harvest_field.gd`, `scenes/harvesting_test.tscn` | Playable harvesting field, finite-cache membership and bounded local access claims |
+| `scripts/collector_truck.gd`, `scripts/collector_harvest.gd` | Primitive unarmed unit using the existing mover and separate timed cargo/order state |
+| `scripts/supply_cache.gd`, `scripts/harvest_transfer.gd` | Finite instance inventory and historical committed transfer values |
+| `scripts/harvest_panel.gd`, `tests/harvesting_checks.gd` | Contextual cargo UI and real-trip, callback, lifecycle, conservation and earned-production checks |
 
 The field partitions a flat `NavigationMesh` at obstacle edges expanded by 0.85 units, producing connected convex polygons with holes. Geometry and navigation use the same obstacle definitions. Agents advance along navigation paths in physics ticks; step lengths are bounded to prevent overshoot and positions stay on the clearance mesh. `CharacterBody3D` collisions provide an additional solid obstacle boundary.
 
@@ -130,7 +140,7 @@ Change only `unit.crowd_enabled` to toggle avoidance, including during movement.
 
 There are no global managers or autoloads. Selection emits signals for count feedback and movement requests. The scene wires these to destination assignment; indicators never own selection state. Configuration is exposed with typed exports in the relevant scripts. Because this scene is constructed at runtime, edit those defaults or inspect the Remote scene while running.
 
-Combat components are created only when a unit has a weapon definition. The movement fields retain their original configuration. Unit-level command APIs retain bools; field-level commands return the batch result described above. Group authority is captured before selection queries and guarded during dispatch. Internal `retarget_pursuit()` keeps the movement order, stall clock, signed path-progress credit/debt and recovery history. Rebasing compares old/new path lengths at the same attacker position, so a changing target alone earns no progress. A real detour keeps its waypoint and expiry; a fallback repath tracks the new destination. Real replacement orders still clear per-order state. Selection and targeting require live membership in the owning field, using an O(1) registration lookup plus tree/ancestry checks.
+Combat health/death components are created when a unit has a weapon definition or explicitly enables `damageable`; the latter permits an unarmed collector without a weapon emitter. Attack permission still requires an actual weapon. The movement fields retain their original configuration. Unit-level command APIs retain bools; field-level commands return the batch result described above. Group authority is captured before selection queries and guarded during dispatch. Internal `retarget_pursuit()` keeps the movement order, stall clock, signed path-progress credit/debt and recovery history. Rebasing compares old/new path lengths at the same attacker position, so a changing target alone earns no progress. A real detour keeps its waypoint and expiry; a fallback repath tracks the new destination. Real replacement orders still clear per-order state. Selection and targeting require live membership in the owning field, using an O(1) registration lookup plus tree/ancestry checks.
 
 ## Validation
 
@@ -155,6 +165,8 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/spherical_projectile_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/production_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/production_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/harvesting_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/harvesting_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
@@ -179,6 +191,6 @@ See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/m
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
 - Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
-- The production scene has starting credits and fixed-base Rifle queues only. No harvesting, player construction, building destruction/capture/sale, vehicles from production, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
+- The production scene remains a starting-credit and fixed-base queue demonstration; harvesting is in its separate scene. No player construction, building destruction/capture/sale, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
 
-Physical-input production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to fixed flat geometry, normal simulation timing and a small local exit search; neither physics lockstep determinism nor universal frame-rate behavior is claimed.
+Physical-input harvesting/production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to fixed flat geometry, normal simulation timing and a small local exit search; harvesting has eight local access slots per target and can fail safely under permanent obstruction. Neither physics lockstep determinism nor universal frame-rate behavior is claimed.

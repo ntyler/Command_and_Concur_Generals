@@ -43,14 +43,15 @@ func _ready() -> void:
 	add_child(health)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
-	weapon = WeaponEmitter.new()
-	weapon.unit = unit
-	weapon.definition = unit.combat_weapon
-	add_child(weapon)
+	if unit.combat_weapon != null:
+		weapon = WeaponEmitter.new()
+		weapon.unit = unit
+		weapon.definition = unit.combat_weapon
+		add_child(weapon)
 	feedback = CombatFeedback.new()
 	feedback.unit = unit
 	feedback.health = health
-	feedback.display_name = weapon.definition.display_name
+	feedback.display_name = weapon.definition.display_name if weapon != null else unit.unit_display_name
 	unit.add_child(feedback)
 	unit.availability_changed.connect(_on_own_availability_changed)
 
@@ -123,7 +124,8 @@ func _end_order(reason: String) -> void:
 func _physics_process(delta: float) -> void:
 	if not TeamRules.is_combat_member(unit.gameplay_field, unit):
 		return
-	weapon.advance(delta)
+	if weapon != null:
+		weapon.advance(delta)
 	if state == State.NONE:
 		if player_command == PlayerCommand.MOVE and not unit.moving:
 			player_command = PlayerCommand.NONE

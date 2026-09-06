@@ -5,6 +5,8 @@ signal selection_changed(count: int)
 signal move_requested(destination: Vector3)
 signal attack_requested(target: RTSUnit)
 signal stop_requested
+signal harvest_requested(cache: SupplyCache)
+signal deposit_requested(headquarters: RTSBuilding)
 
 @export var friendly_owner_id: int = 1
 @export var drag_threshold: float = 6.0
@@ -110,6 +112,10 @@ func _physics_process(_delta: float) -> void:
 				if target != null:
 					if TeamRules.is_hostile_target(gameplay_field, friendly_owner_id, target):
 						attack_requested.emit(target)
+				elif hit["collider"] is SupplyCache:
+					harvest_requested.emit(hit["collider"] as SupplyCache)
+				elif hit["collider"] is RTSBuilding:
+					deposit_requested.emit(hit["collider"] as RTSBuilding)
 				elif (hit["collider"] as CollisionObject3D).collision_layer & 1:
 					move_requested.emit(hit["position"])
 	_pending_picks.clear()

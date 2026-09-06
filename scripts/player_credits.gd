@@ -29,6 +29,14 @@ func refund(owner_id: int, amount: int) -> void:
 		_balances[owner_id] += amount
 
 
+func credit(owner_id: int, amount: int) -> bool:
+	# Silent deposit: the caller clears cargo before publishing either side.
+	if not active or amount <= 0 or not _balances.has(owner_id) or balance(owner_id) > 9223372036854775807 - amount:
+		return false
+	_balances[owner_id] += amount
+	return true
+
+
 func publish(owner_id: int) -> void:
 	if active:
 		changed.emit(owner_id)
