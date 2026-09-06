@@ -466,6 +466,8 @@ func _set_state(state: MovementState) -> void:
 
 func set_movement_debug(enabled: bool) -> void:
 	movement_debug = enabled
+	if is_instance_valid(combat) and is_instance_valid(combat.feedback):
+		combat.feedback.refresh_fire_debug()
 	destination_indicator.visible = enabled and show_destination and order_version > 0
 	waypoint_indicator.visible = enabled
 	debug_label.visible = enabled

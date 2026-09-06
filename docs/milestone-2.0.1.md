@@ -1,5 +1,7 @@
 # Milestone 2.0.1 — combat command and lifecycle correctness
 
+This is the historical corrective acceptance report. References below to line-of-fire work not being started describe that milestone's endpoint. [Milestone 2.5](milestone-2.5.md) now adds weapon obstruction while retaining these corrections and their regression assertions.
+
 **Verdict: ACCEPT** for the existing flat, static RTS fields and scoped combat foundation. All five review findings have focused repository regressions. The complete existing regression set, graphical corrective playback and fresh-copy validation pass. No physical keyboard-and-mouse playtest is claimed. No line-of-fire or projectile/world-collision work was started. No commit or tag was made.
 
 ## Preflight and scope

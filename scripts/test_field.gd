@@ -27,6 +27,7 @@ var _registered: Dictionary[int, RTSUnit] = {}
 var camera_rig: RTSCamera
 var selection: SelectionController
 var destinations: GroupDestinations
+var fire_query := LineOfFire.new()
 var navigation_region: NavigationRegion3D
 var status_label: Label
 var info_panel: PanelContainer
@@ -277,8 +278,9 @@ func _build_field() -> void:
 		var rectangle := obstacles[i]
 		var center := rectangle.get_center()
 		var height := 1.8 + i * 0.4
-		_box(Vector3(rectangle.size.x, height, rectangle.size.y), Vector3(center.x, height / 2.0, center.y), Color("8b7866"), 4)
-		_box(Vector3(rectangle.size.x - 0.3, 0.08, rectangle.size.y - 0.3), Vector3(center.x, height + 0.04, center.y), Color("c4a17a"))
+		_box(Vector3(rectangle.size.x, height, rectangle.size.y), Vector3(center.x, height / 2.0, center.y), Color("8b7866"), 4 | LineOfFire.BLOCKER_MASK)
+		var cap_size := Vector2(maxf(rectangle.size.x - 0.3, rectangle.size.x * 0.5), maxf(rectangle.size.y - 0.3, rectangle.size.y * 0.5))
+		_box(Vector3(cap_size.x, 0.08, cap_size.y), Vector3(center.x, height + 0.04, center.y), Color("c4a17a"))
 
 
 func _build_navigation() -> void:
@@ -378,7 +380,7 @@ func _build_feedback() -> void:
 	controls.text = "WASD / arrows / screen edges  ·  Pan\nMouse wheel  ·  Zoom\nLeft click / drag  ·  Select\nShift + click  ·  Toggle    Shift + drag  ·  Add\nRight click ground  ·  Move    X  ·  Stop\nEsc  ·  Cancel drag    F3  ·  Movement debug"
 	if units.size() > 0 and units[0].combat != null:
 		title.text = "FIELDWORK  /  COMBAT LAB"
-		controls.text += "\nRight click hostile  ·  Attack\nAlpha: mint    Bravo: coral\nRange only: no cover or line of sight"
+		controls.text += "\nRight click hostile  ·  Attack\nAlpha: mint    Bravo: coral\nWalls block fire · BLOCKED units hold\nF3 also shows firing lines"
 	controls.add_theme_font_size_override("font_size", 14)
 	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(controls)

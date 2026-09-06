@@ -2,7 +2,7 @@ class_name CombatController
 extends Node
 ## Per-unit orders coordinate the existing mover, health, weapon and feedback.
 
-enum State { NONE, PURSUING, FACING, ATTACKING, TARGET_INVALIDATED }
+enum State { NONE, PURSUING, FACING, ATTACKING, TARGET_INVALIDATED, BLOCKED }
 enum PlayerCommand { NONE, MOVE, STOP, ATTACK }
 signal state_changed(state: State)
 
@@ -12,6 +12,7 @@ signal state_changed(state: State)
 @export var pursuit_interval: float = 0.5
 @export var target_move_threshold: float = 1.0
 @export var pursuit_range_fraction: float = 0.85
+@export_range(0.05, 2.0) var blocked_recheck_interval: float = 0.2
 
 var unit: RTSUnit
 var health: UnitHealth
@@ -24,6 +25,8 @@ var pursuit_elapsed: float = 0.0
 var pursuit_recoveries: int = 0
 var pursuit_updates: int = 0
 var end_reason: String = ""
+var fire_line: LineOfFire.Trace
+var _clearance_wait: float = 0.0
 var _target: WeakRef
 var _pursuit_wait: float = 0.0
 var _last_target_position: Vector3
@@ -88,6 +91,7 @@ func prepare_order(command: PlayerCommand) -> int:
 	_last_target_position = Vector3.ZERO
 	_has_chase = false
 	end_reason = ""
+	_clear_fire_line()
 	# A fired weapon's cooldown survives order replacement; rapid commands cannot
 	# bypass its fire rate. Already-launched projectiles belong to the field.
 	return order_version
@@ -136,7 +140,7 @@ func _physics_process(delta: float) -> void:
 	pursuit_recoveries += maxi(0, unit.recovery_attempts - _last_recovery_count)
 	_last_recovery_count = unit.recovery_attempts
 	var distance := unit.global_position.distance_to(target.global_position)
-	var holding := state == State.FACING or state == State.ATTACKING
+	var holding := state == State.FACING or state == State.ATTACKING or state == State.BLOCKED
 	if distance <= weapon.definition.attack_range or (holding and distance <= weapon.definition.attack_range + range_hysteresis):
 		_has_chase = false
 		if unit.moving:
@@ -144,15 +148,39 @@ func _physics_process(delta: float) -> void:
 			if order_version != version:
 				return
 		unit.face_toward(target.global_position, turn_speed, delta)
-		if distance > weapon.definition.attack_range or unit.facing_error(target.global_position) > deg_to_rad(weapon.definition.facing_tolerance_degrees):
+		if distance > weapon.definition.attack_range:
+			_clear_fire_line()
+			state = State.FACING
+			publish_state(version)
+			return
+		_clearance_wait -= delta
+		if fire_line == null or _clearance_wait <= 0.000001:
+			fire_line = unit.gameplay_field.fire_query.firing_line(unit, target)
+			_clearance_wait = blocked_recheck_interval
+			feedback.show_fire_line(fire_line)
+		if not fire_line.is_clear():
+			_hold_blocked(version)
+			return
+		feedback.set_fire_blocked(false)
+		if unit.facing_error(target.global_position) > deg_to_rad(weapon.definition.facing_tolerance_degrees):
 			state = State.FACING
 			publish_state(version)
 			return
 		state = State.ATTACKING
 		publish_state(version)
-		if order_version == version:
-			weapon.try_fire(target)
+		if not is_instance_valid(self) or order_version != version:
+			return
+		var fired_now := weapon.try_fire(target)
+		# The firing callback may replace the order or immediately destroy us.
+		if not is_instance_valid(self) or order_version != version:
+			return
+		if not fired_now and weapon.last_fire_line != null and not weapon.last_fire_line.is_clear():
+			fire_line = weapon.last_fire_line
+			_clearance_wait = blocked_recheck_interval
+			feedback.show_fire_line(fire_line)
+			_hold_blocked(version)
 		return
+	_clear_fire_line()
 	state = State.PURSUING
 	pursuit_elapsed += delta
 	if unit.movement_state == RTSUnit.MovementState.FAILED or pursuit_elapsed >= unit.command_timeout or pursuit_recoveries >= unit.maximum_recoveries:
@@ -164,6 +192,21 @@ func _physics_process(delta: float) -> void:
 		if not _has_chase or target.global_position.distance_to(_last_target_position) >= target_move_threshold or not unit.moving:
 			_update_pursuit(target, version)
 	publish_state(version)
+
+
+func _clear_fire_line() -> void:
+	fire_line = null
+	_clearance_wait = 0.0
+	if is_instance_valid(feedback):
+		feedback.set_fire_blocked(false)
+		feedback.show_fire_line(null)
+
+
+func _hold_blocked(version: int) -> void:
+	# Holding is intentional: no move order, recovery attempt or new deadline.
+	state = State.BLOCKED
+	feedback.set_fire_blocked(true)
+	publish_state(version) # All state is coherent; write nothing after listeners.
 
 
 func _update_pursuit(target: RTSUnit, version: int) -> void:

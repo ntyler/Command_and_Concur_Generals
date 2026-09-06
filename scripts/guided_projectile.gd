@@ -3,6 +3,7 @@ extends Node3D
 ## A shot owns its launch data and weak references, independently of source orders.
 
 signal resolved(damage_applied: float)
+enum Outcome { NONE, TARGET, WORLD, INVALIDATED, EXPIRED }
 
 var age: float = 0.0
 var speed: float
@@ -10,6 +11,10 @@ var lifetime: float
 var damage: float
 var source_team: int
 var spent: bool = false
+var outcome: Outcome = Outcome.NONE
+var contact_position: Vector3
+var last_segment_start: Vector3
+var last_segment_end: Vector3
 var _target: WeakRef
 var _source: WeakRef
 var _field: WeakRef
@@ -49,23 +54,45 @@ func _physics_process(delta: float) -> void:
 	age += delta
 	var field := _field.get_ref() as TestField
 	var target := target_unit()
-	if age >= lifetime or not TeamRules.is_hostile_target(field, source_team, target):
-		_finish(false)
+	if age >= lifetime:
+		_finish(Outcome.EXPIRED) # Lifetime has priority at the start of this tick.
 		return
-	var aim := target.global_position + Vector3.UP * 0.75
-	global_position = global_position.move_toward(aim, speed * delta)
-	if global_position.distance_to(aim) <= 0.05:
-		_finish(true)
+	if not TeamRules.is_hostile_target(field, source_team, target):
+		_finish(Outcome.INVALIDATED)
+		return
+	var aim := LineOfFire.aim(target)
+	last_segment_start = global_position
+	last_segment_end = global_position.move_toward(aim, speed * delta)
+	var contact := field.fire_query.segment(get_world_3d(), last_segment_start, last_segment_end)
+	if not contact.available:
+		return
+	if contact.blocked:
+		global_position = contact.position
+		_finish(Outcome.WORLD)
+		return
+	global_position = last_segment_end
+	# The segment ends at the aim point without overshoot or a proximity shortcut.
+	# World contact, including an endpoint numerical tie, is resolved first.
+	if global_position == aim:
+		_finish(Outcome.TARGET)
 
 
-func _finish(impact: bool) -> void:
+func _finish(terminal: Outcome) -> void:
 	if spent:
 		return
 	spent = true # Resolve once, before damage callbacks can reenter.
+	outcome = terminal
+	contact_position = global_position
 	set_physics_process(false)
 	hide()
 	queue_free()
 	var applied: float = 0.0
-	if impact:
+	if terminal == Outcome.WORLD:
+		var field := _field.get_ref() as TestField
+		if is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion():
+			CombatFeedback.world_impact(field, contact_position)
+	elif terminal == Outcome.TARGET:
 		applied = TeamRules.damage_target(_field.get_ref() as TestField, source_team, target_unit(), damage, _source.get_ref() as RTSUnit)
+	if not is_instance_valid(self):
+		return
 	resolved.emit(applied)

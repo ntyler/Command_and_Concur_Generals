@@ -1,5 +1,7 @@
 # Milestone 2 — Basic RTS combat foundation
 
+This report preserves historical Milestone 2 behavior and results. Its range-only firing and absent projectile/world collision were superseded by [Milestone 2.5](milestone-2.5.md); those earlier limits do not describe the current implementation.
+
 Validated on 2026-09-06 with **Godot 4.7.2.stable.official.ed1daf0bf**, Windows, PowerShell 7.6.5, and the Compatibility renderer. Graphical runs used an NVIDIA GeForce RTX 2070 SUPER, OpenGL 3.3, driver 610.88. The original reported verdict was **ACCEPT within the tested flat, static-field scope**; the subsequent review found five coverage/correctness gaps. See the qualification below and [Milestone 2.0.1](milestone-2.0.1.md) for repaired acceptance evidence. No commit was made and no later milestone was started.
 
 ## Preflight and preserved baseline
@@ -27,7 +29,7 @@ The tables and measurements below preserve the original Milestone 2 runs. Their 
 
 Launch `res://scenes/combat_test.tscn` directly or open it in the editor and press F6. F5 still launches the original movement field. The combat field uses the original field's fixed camera at focus `(0, 0, 0)`, zoom 52, and bounds `x = ±29`, `z = ±23`.
 
-Each team has four Rifle Units and two Rocket Vehicles. Alpha is mint and locally controlled; Bravo is coral with retaliation enabled. Fixed spawns are defined in `CombatField.STARTS`. Two obstacles share their definitions with navigation generation: `Rect2(-5, -12, 4, 6)` and `Rect2(4, 5, 5, 6)`. The controls panel explains the teams and range-only combat.
+Each team has four Rifle Units and two Rocket Vehicles. Alpha is mint and locally controlled; Bravo is coral with retaliation enabled. Fixed spawns are defined in `CombatField.STARTS`. Two obstacles share their definitions with navigation generation: `Rect2(-5, -12, 4, 6)` and `Rect2(4, 5, 5, 6)`. The original controls panel explained the teams and range-only combat; Milestone 2.5 updates it for weapon obstruction.
 
 - Left click or drag selects Alpha; Shift keeps the existing add/toggle behavior.
 - Right-click a living hostile to attack. Right-click valid ground to move. Friendly-unit clicks issue no attack or replacement movement.
@@ -241,7 +243,7 @@ Overlap retains the Milestone 1.5.1 definition: each pair with center distance b
 
 ## Limits and next scope
 
-There is **no line of sight, cover, guided-projectile world collision, splash damage, armor multipliers, attack-move, strategic AI, economy or construction**. Range-based rifles can hit through obstacles; rockets can pass through them. There is also no production, fog, campaign, multiplayer or other later gameplay system. All art is original primitive geometry and generated materials; no assets or plugins were downloaded.
+Historical Milestone 2 scope: there was **no line of sight, cover, guided-projectile world collision, splash damage, armor multipliers, attack-move, strategic AI, economy or construction**. Range-based rifles could hit through obstacles and rockets could pass through them. Milestone 2.5 supersedes weapon/world behavior only. There is still no production, fog, campaign, multiplayer or other later gameplay system. All art is original primitive geometry and generated materials; no assets or plugins were downloaded.
 
 The firing-position heuristic can be suboptimal near obstacles or crowds. Avoidance permits partial moving overlap; bounded failure remains possible in untested congestion. Opposing traffic, changing navigation, varied terrain, large combat crowds beyond the 24-unit fixture, other platforms, long-duration soak behavior and physical-input feel are **NOT VERIFIED**. Fixed setups do not imply network/replay determinism.
 

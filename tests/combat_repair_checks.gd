@@ -337,6 +337,7 @@ func _destruction_checks() -> void:
 				await _frames(3)
 			else:
 				source.combat.set_physics_process(false)
+				await physics_frame
 				var accepted := emitter.try_fire(target)
 				_check(accepted, "committed hitscan returns true after " + reaction)
 			_check(health.current == 88.0 and events["damage"] == 1 and events["committed"], "single damage and cooldown commitment: %s controller=%s" % [reaction, controller_path])
@@ -446,6 +447,7 @@ func _rapid_replacement_checks() -> void:
 	var source := pair[0]
 	var target := pair[1]
 	_align(source, target)
+	await physics_frame
 	_check(source.combat.weapon.try_fire(target), "initial real hitscan shot accepted")
 	field.selection.select_clicked(source, false)
 	var bypassed := false
@@ -463,7 +465,7 @@ func _launch_ownership_checks() -> void:
 		var pair := await _pair(true, 8.0)
 		var source := pair[0]
 		var target := pair[1]
-		var projectile := _launch(source, target)
+		var projectile := await _launch(source, target)
 		if projectile == null:
 			continue
 		var resolved := {"count": 0, "damage": 0.0}

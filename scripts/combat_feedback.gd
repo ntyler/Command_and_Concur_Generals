@@ -8,6 +8,10 @@ var display_name: String
 var health_fill: MeshInstance3D
 var health_label: Label3D
 var flash_remaining: float = 0.0
+var fire_blocked: bool = false
+var _last_fire_line: LineOfFire.Trace
+var _fire_segment: MeshInstance3D
+var _fire_contact: MeshInstance3D
 var _body_materials: Array[StandardMaterial3D] = []
 
 
@@ -48,6 +52,9 @@ func _refresh_team() -> void:
 func _refresh_health() -> void:
 	health_fill.scale.x = maxf(0.001, health.current / health.maximum)
 	health_label.text = "%s\n%d / %d" % [display_name, ceili(health.current), ceili(health.maximum)]
+	if fire_blocked:
+		health_label.text += "\nBLOCKED"
+	health_label.modulate = Color("ffce78") if fire_blocked else Color.WHITE
 
 
 func _on_damaged(_amount: float, _source: Node) -> void:
@@ -65,9 +72,9 @@ func _physics_process(delta: float) -> void:
 		set_physics_process(false)
 
 
-func show_tracer(aim: Vector3) -> void:
-	var muzzle := unit.global_position + Vector3.UP * 0.9
+func show_tracer(muzzle: Vector3, aim: Vector3) -> void:
 	var trace := MeshInstance3D.new()
+	trace.add_to_group("combat_tracers")
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.045, 0.045, muzzle.distance_to(aim))
 	trace.mesh = mesh
@@ -82,3 +89,65 @@ func show_tracer(aim: Vector3) -> void:
 	var tween := trace.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
 	tween.tween_interval(0.12)
 	tween.tween_callback(trace.queue_free)
+
+
+func set_fire_blocked(blocked: bool) -> void:
+	if fire_blocked == blocked:
+		return
+	fire_blocked = blocked
+	_refresh_health()
+
+
+func show_fire_line(result: LineOfFire.Trace) -> void:
+	_last_fire_line = result
+	refresh_fire_debug()
+
+
+func refresh_fire_debug() -> void:
+	if not unit.movement_debug or _last_fire_line == null:
+		if is_instance_valid(_fire_segment):
+			_fire_segment.hide()
+			_fire_contact.hide()
+		return
+	if not is_instance_valid(_fire_segment):
+		_fire_segment = MeshInstance3D.new()
+		_fire_segment.mesh = ImmediateMesh.new()
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color("ffd27a")
+		_fire_segment.material_override = material
+		add_child(_fire_segment)
+		_fire_contact = MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.12
+		sphere.height = 0.24
+		_fire_contact.mesh = sphere
+		_fire_contact.material_override = material
+		add_child(_fire_contact)
+	var mesh := _fire_segment.mesh as ImmediateMesh
+	mesh.clear_surfaces()
+	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	mesh.surface_add_vertex(to_local(_last_fire_line.from_position))
+	mesh.surface_add_vertex(to_local(_last_fire_line.to_position))
+	mesh.surface_end()
+	_fire_segment.show()
+	_fire_contact.position = to_local(_last_fire_line.position)
+	_fire_contact.visible = _last_fire_line.blocked
+
+
+static func world_impact(field: TestField, contact: Vector3) -> void:
+	var flash := MeshInstance3D.new()
+	flash.add_to_group("combat_world_impacts")
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.16
+	mesh.height = 0.32
+	flash.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("ff9a53")
+	flash.material_override = material
+	field.add_child(flash)
+	flash.global_position = contact
+	var tween := flash.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	tween.tween_interval(0.18)
+	tween.tween_callback(flash.queue_free)

@@ -162,6 +162,7 @@ func _hitscan_checks() -> void:
 	var target := pair[1]
 	var weapon := source.combat.weapon
 	source.combat.set_physics_process(false)
+	await physics_frame # Direct weapon queries belong to safe physics processing.
 	_check(not weapon.try_fire(target) and target.combat.health.current == 100.0, "outside-facing-tolerance hitscan cannot fire")
 	_align(source, target)
 	var observed := {"count": 0, "health": 0.0, "cooldown": 0.0}
@@ -173,6 +174,7 @@ func _hitscan_checks() -> void:
 	_check(observed["count"] == 1 and observed["health"] == 88.0 and observed["cooldown"] == 0.75, "fired signal observes immediate damage and established cooldown")
 	_check(target.combat.feedback.health_label.text.contains("88 / 100") and target.combat.feedback.flash_remaining > 0.0, "health feedback and damage flash update immediately")
 	await _capture("combat_rifle_fire")
+	await physics_frame # A graphical capture resumes outside safe query processing.
 	_check(not weapon.try_fire(target) and target.combat.health.current == 88.0, "same shot cannot be repeated during cooldown")
 	weapon.advance(0.74)
 	_check(not weapon.try_fire(target), "cooldown blocks early repeat fire")
@@ -399,6 +401,8 @@ func _replacement_signal_checks() -> void:
 
 func _launch(source: RTSUnit, target: RTSUnit) -> GuidedProjectile:
 	source.combat.set_physics_process(false) # Isolate exactly one real weapon launch.
+	if not Engine.is_in_physics_frame():
+		await physics_frame
 	_align(source, target)
 	var shot := {"projectile": null}
 	var listener := func(_target: RTSUnit, projectile: GuidedProjectile) -> void: shot["projectile"] = projectile
@@ -488,7 +492,7 @@ func _projectile_checks() -> void:
 	var pair := await _pair(true, 8.0)
 	var source := pair[0]
 	var target := pair[1]
-	var projectile := _launch(source, target)
+	var projectile := await _launch(source, target)
 	if projectile == null:
 		return
 	var launch_position := projectile.global_position
@@ -522,7 +526,7 @@ func _projectile_checks() -> void:
 			source.combat.weapon.definition = source.combat.weapon.definition.duplicate() as WeaponDefinition
 			source.combat.weapon.definition.projectile_speed = 0.1
 			source.combat.weapon.definition.projectile_lifetime = 0.2
-		projectile = _launch(source, target)
+		projectile = await _launch(source, target)
 		if projectile == null:
 			continue
 		var outcome := {"count": 0, "damage": 0.0, "age": 0.0}
@@ -555,6 +559,7 @@ func _retaliation_checks() -> void:
 	var target := pair[1]
 	target.combat.retaliation_enabled = true
 	_align(source, target)
+	await physics_frame
 	source.combat.weapon.try_fire(target)
 	var version := target.combat.order_version
 	_check(target.combat.target_unit() == source and target.combat.player_command == CombatController.PlayerCommand.NONE, "damaged retaliation-enabled hostile attacks valid damage source")
