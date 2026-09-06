@@ -57,10 +57,9 @@ func _route_rejection_checks() -> void:
 		var unit := field.units[i]
 		preserved = preserved and unit.order_version == versions[i] and unit.assigned_destination == targets[i] and unit.movement_state == RTSUnit.MovementState.ARRIVED and not unit.moving
 	_check(preserved, "rejected command preserves the prior coherent production order")
-	# Call dynamically so this test also runs against the former void API.
 	field.selection.select_clicked(null, false)
-	var rejected: Variant = field.call("issue_move", Vector3.ZERO)
-	_check(rejected is bool and rejected == false, "command API explicitly rejects an empty selection")
+	var rejected := field.issue_move(Vector3.ZERO)
+	_check(not rejected.has_acceptance() and rejected.intended_ids.is_empty() and not rejected.superseded, "command API explicitly rejects an empty selection")
 
 
 func _solo(crowd: bool = true) -> RTSUnit:
@@ -207,7 +206,7 @@ func _departure_checks() -> void:
 			_check(field.selection.selected_units() == [remaining], label + ": departure pruned from selection")
 			_check(field.units.size() == 29, label + ": active field enumeration excludes departure")
 			for repeat in range(2):
-				field.issue_move(old_target)
+				_check(field.issue_move(old_target).is_complete(), "remaining member accepts a fresh reservation reuse command")
 				_check(remaining.assigned_destination.distance_to(old_target) < 0.01, label + ": old reservation released and repeated cleanup safe")
 			if detach:
 				_check(departed.order_version == old_version, "detached unit receives no stale group command")
@@ -221,7 +220,7 @@ func _departure_checks() -> void:
 	_check(field.units.size() == 30 and field.units.count(unit) == 1, "reparenting within the field restores exactly one active membership")
 	field.selection.select_clicked(unit, false)
 	var old_version := unit.order_version
-	field.issue_move(Vector3(-22, 0, -10))
+	_check(field.issue_move(Vector3(-22, 0, -10)).is_complete(), "reparented member accepts a fresh move command")
 	_check(unit.order_version == old_version + 1, "unit remains commandable after internal reparenting")
 
 

@@ -1,6 +1,6 @@
-# Fieldwork — RTS controls prototype
+# Fieldwork — RTS prototype
 
-An original 3D RTS controls lab built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. Milestone 1.5 adds crowd handling, bounded recovery, and a 30–50 unit stress layout to the original 12-unit controls field. Milestone 1.5.1 repairs command validation, synchronous movement transitions, live crowd configuration, and unit departure handling.
+An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Milestone 2 adds a separate two-team combat field with health, hitscan rifles, guided rockets, pursuit and limited retaliation.
 
 Open `project.godot` in Godot and press **F6** with `scenes/test_field.tscn` open, or **F5** to run the configured main scene. There is no asset download, plugin installation, navigation bake, or build step. The field and its navigation mesh are generated together at scene startup.
 
@@ -21,6 +21,14 @@ The original field remains the F5 main scene. To run the alternate stress layout
 
 The stress field is 72 × 56 units, with a 3.6-unit physical gate (1.9 units of navigable center clearance), an L-shaped obstacle, a three-obstacle cluster, and open western ground. Spawns and camera are fixed. `--units` is clamped to 30–50. Suggested world-space test destinations: wide route `(-22, 0, -15)`, beyond the gate `(9, 0, 0)` for 30 or `(10, 0, 0)` for 50, behind the L `(25, 0, -18)`, cluster `(20, 0, 22)`, boundary `(34.8, 0, 25.8)`.
 
+To play combat, open `scenes/combat_test.tscn` and press F6, or run:
+
+```powershell
+& $godot --path . res://scenes/combat_test.tscn
+```
+
+Team Alpha is mint and player-controlled; Team Bravo is coral and retaliates when damaged. Each team starts with four Rifle Units and two Rocket Vehicles, at fixed positions around two obstacles. Select Alpha units, right-click a Bravo unit, and watch them approach, face and fire. Ground movement, X Stop, or another attack target interrupts the order. Hostiles do not initiate attacks or search for targets on their own.
+
 Exact engine used: `4.7.2.stable.official.ed1daf0bf`. The standard portable Windows build was installed after the user confirmed Godot needed installation. No global PATH or file associations were changed.
 
 ## Controls
@@ -36,12 +44,31 @@ Exact engine used: `4.7.2.stable.official.ed1daf0bf`. The standard portable Wind
 | Shift + left click | Add a unit or toggle it off |
 | Shift + drag | Add enclosed units without clearing others |
 | Right click ground | Replace selected units' move orders with distinct destinations |
+| Right click a living hostile unit | Attack with selected combat units; friendly clicks issue no attack |
+| X | Stop selected units' movement and combat; S remains camera pan |
 | Escape | Cancel the current selection gesture |
 | F3 | Toggle movement debugging for every unit |
 
-The controls panel consumes pointer input and suspends camera movement while hovered. Releasing a drag over it cancels the gesture. Losing application focus or leaving the window also cancels a drag. Shift is sampled when a selection gesture begins. Shift-clicking empty ground preserves selection. Clicks on obstacles or beyond the ground issue no move order; ground points near the boundary are projected onto navigation.
+The controls panel consumes pointer input and suspends camera movement while hovered. X still stops selected units over this passive panel; a focused UI control that consumes X keeps the event. Releasing a drag over it cancels the gesture. Losing application focus or leaving the window also cancels a drag. Shift is sampled when a selection gesture begins. Shift-clicking empty ground preserves selection. Clicks on obstacles or beyond the ground issue no move order; ground points near the boundary are projected onto navigation.
 
-Mint rings indicate selected units. Movement debugging is off by default. F3 (or `--movement-debug`) shows amber final destinations, blue current waypoints, and labels with state, stalled time and retry count. Markers remain available after arrival. Every unit has one stable numeric identity and friendly owner ID `1`. The original camera begins at ground focus `(0, 0, 0)`, zoom `52`, with focus bounds `x = ±29`, `z = ±23`. The stress camera uses the same angle, focus `(0, 0, 0)`, zoom `62`, and bounds `x = ±35`, `z = ±27`. The elevated Camera3D is offset behind its ground focus.
+Mint rings indicate selected units. Movement debugging is off by default. F3 (or `--movement-debug`) shows amber final destinations, blue current waypoints, and labels with state, stalled time and retry count. Markers remain available after arrival. Every unit has one stable numeric identity. Existing `owner_id` is also the team ID: `1` for Alpha and `2` for Bravo; the movement fields contain only team 1. The original and combat cameras begin at ground focus `(0, 0, 0)`, zoom `52`, with focus bounds `x = ±29`, `z = ±23`. The stress camera uses the same angle, focus `(0, 0, 0)`, zoom `62`, and bounds `x = ±35`, `z = ±27`. The elevated Camera3D is offset behind its ground focus.
+
+## Combat behavior
+
+| Unit | Health | Damage | Range | Cooldown | Delivery |
+| --- | --- | --- | --- | --- | --- |
+| Rifle Unit | 100 | 12 | 8 | 0.75 s | Immediate hitscan with a brief tracer |
+| Rocket Vehicle | 150 | 32 | 11 | 1.8 s | Guided projectile, speed 9 units/s, maximum life 6 s |
+
+Health bars and unit-name/current-health labels are always visible on combat units. A brief white flash marks damage; dead units immediately stop participating and disappear. Health clamps at zero, death occurs once, and nonpositive/nonfinite damage is rejected.
+
+Combat uses the existing navigation mover. Pursuit aims at 85% of weapon range from the target and checks for updates every 0.5 simulated seconds; a target movement of at least 1 unit or a completed chase requires a new path. Units turn at 4 radians/s and fire within 8 degrees of the target. They stop at weapon range, hold position through a 0.75-unit hysteresis band, and resume pursuit beyond that band. Holding outside actual weapon range never permits a shot. Recovery attempts and pursuit time remain bounded by the mover's existing per-order limits, including across chase updates.
+
+Weapon cooldown survives replacement orders, preventing rapid command input from bypassing fire rate. An already-fired projectile retains its original target, launch team and damage even if its source moves, changes orders or dies. Target death, detachment, unregistration or becoming friendly to the launch team cancels impact safely.
+
+Retaliation uses the same attack system and only reacts to a valid hostile damage source. An explicit player attack or active movement takes priority; X Stop holds that priority until another player order. A completed move releases its temporary retaliation priority. There is no idle auto-acquisition.
+
+Combat is deliberately range-based: **no line of sight or cover**, and **guided projectiles ignore world obstacles**. Neither weapon has splash damage or armor multipliers. Right-clicking ground is ordinary movement; there is **no attack-move**.
 
 ## Implementation
 
@@ -59,12 +86,19 @@ Mint rings indicate selected units. Movement debugging is off by default. F3 (or
 | `tests/movement_repair_checks.gd` | Focused command, signal, crowd-toggle, departure, recovery and stationary-observation regressions |
 | `tools/run-godot.ps1` | PowerShell 7 child-process launcher with an external deadline and preserved child exit codes |
 | `tests/validation_wrapper_checks.ps1`, `tests/blocking_fixture.gd` | Isolated wrapper/watchdog verification, including a deliberately blocked main thread |
+| `scripts/combat_field.gd`, `scenes/combat_test.tscn` | Alternate two-team field sharing the existing navigation, camera and selection |
+| `scripts/team_rules.gd`, `scripts/health.gd` | Central ownership/target rules and reusable health authority |
+| `scripts/combat_controller.gd` | Versioned per-unit orders, pursuit, retaliation and death coordination |
+| `scripts/weapon_definition.gd`, `weapons/*.tres`, `scripts/weapon_emitter.gd` | Configurable weapon data, simulation cooldown and firing authority |
+| `scripts/guided_projectile.gd`, `scripts/combat_feedback.gd` | Independent projectile travel/impact and team/health/tracer presentation |
+| `tests/combat_checks.gd`, `tests/engine_error_probe.gd` | Combat integration/load tests and engine-error capture through teardown |
+| `scripts/command_batch_result.gd`, `tests/combat_repair_checks.gd` | Historical batch acceptance values and focused command/lifecycle regressions |
 
 The field partitions a flat `NavigationMesh` at obstacle edges expanded by 0.85 units, producing connected convex polygons with holes. Geometry and navigation use the same obstacle definitions. Agents advance along navigation paths in physics ticks; step lengths are bounded to prevent overshoot and positions stay on the clearance mesh. `CharacterBody3D` collisions provide an additional solid obstacle boundary.
 
 Group commands generate a deterministic compact lattice with configurable spacing (default 1.5), a group-size-dependent radius capped at 18, and a 1,600-candidate ceiling. Slots are projected onto navigation and checked for connectivity; spatial buckets reject duplicates and preserve reservations belonging to unselected units. Coordinate ordering followed by three pair-swap passes gives O(n²) assignment work with stable ties. Assignments change only on a new order. Commands that cannot provide enough distinct, reachable slots are rejected together, preserving the previous order.
 
-`TestField.issue_move(clicked) -> bool` explicitly reports acceptance. Route tests require a new `order_version` for every intended unit and retain their own assignment snapshot. `last_command_slots` remains diagnostic state and may describe the previous command after rejection. The field registers its units and handles `tree_exiting` immediately; detached or freed units no longer participate in selection, commands or reservations. Internal reparenting restores membership on tree entry.
+`TestField.issue_move`, `issue_attack` and `issue_stop` return `CommandBatchResult`: a field-local request generation, intended and accepted stable unit IDs, `NONE`/`PARTIAL`/`COMPLETE` acceptance, `superseded`, and accepted movement assignments by ID. Acceptance is historical: a callback can replace an accepted order before dispatch returns. Use `is_complete() and not superseded` for a whole unsuperseded batch, or `has_acceptance()` for any historical acceptance. Never use object truthiness. Route tests retain fresh per-unit versions and capture assignments from the result. `last_command_result` and `last_command_slots` are diagnostics; pre-dispatch rejection preserves prior command snapshots and superseded dispatch cannot overwrite newer reporting. The field registers its units and handles `tree_exiting` immediately; detached or freed units no longer participate in selection, commands or reservations. Internal reparenting restores membership on tree entry.
 
 Crowd movement uses Godot's RVO avoidance with ten nearby neighbors and a short prediction horizon. Soft avoidance radii allow limited shoulder contact near destinations or during congestion so parked rows do not seal a passage. Every step remains constrained to navigation and physical obstacles. Arrived units hold position and never rearrange their final slots.
 
@@ -73,6 +107,8 @@ Units distinguish travelling, congested, recovering, arrived and failed. Progres
 Change only `unit.crowd_enabled` to toggle avoidance, including during movement. Its setter synchronizes the agent and clears pending velocity state. The movement callback rejects disabled or obsolete submissions, and a physics-frame guard prevents a mode change from applying two movements in one tick. Scene defaults and crowd tuning are unchanged by Milestone 1.5.1.
 
 There are no global managers or autoloads. Selection emits signals for count feedback and movement requests. The scene wires these to destination assignment; indicators never own selection state. Configuration is exposed with typed exports in the relevant scripts. Because this scene is constructed at runtime, edit those defaults or inspect the Remote scene while running.
+
+Combat components are created only when a unit has a weapon definition. The movement fields retain their original configuration. Unit-level command APIs retain bools; field-level commands return the batch result described above. Group authority is captured before selection queries and guarded during dispatch. Internal `retarget_pursuit()` keeps the movement order, stall clock, signed path-progress credit/debt and recovery history. Rebasing compares old/new path lengths at the same attacker position, so a changing target alone earns no progress. A real detour keeps its waypoint and expiry; a fallback repath tracks the new destination. Real replacement orders still clear per-order state. Selection and targeting require live membership in the owning field, using an O(1) registration lookup plus tree/ancestry checks.
 
 ## Validation
 
@@ -87,6 +123,11 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/movement_stress_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/movement_stress_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/movement_repair_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_repair_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_repair_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
 ```
@@ -99,13 +140,16 @@ Post-arrival checks sample all 180 physics ticks over three simulated seconds, r
 
 Graphical checks write screenshots to ignored `validation-output/`; stress checks also write `stress-metrics.json`. Test playback uses fixed simulation FPS and disables VSync in the test harness only. The main playable scenes retain their normal display settings. Performance observations describe this instrumented playback, not a promised game frame rate. Keep the game focused and avoid physical input during graphical input playback.
 
-See [Milestone 1.5.1 repairs, current results and all 21 acceptance checks](docs/milestone-1.5.1.md). [Milestone 1.5](docs/milestone-1.5.md) retains the configuration and qualified historical measurements; the [Milestone 1 report](docs/milestone-1.md) remains historical evidence. Earlier route evidence was strengthened: every current route now proves acceptance and validates captured assignments. Automated input playback and captured-frame inspection were performed; a human keyboard/mouse playtest was not performed.
+Combat validation combines real input, health, cooldown, order-version and physics assertions with eight graphical captures. Its engine-error probe fails the run on errors or warnings, including during field teardown. The separate `--combat-load` check starts 12 units per team, runs a fixed 12-second engagement, stops survivors and verifies outstanding projectile cleanup after their lifetime. Its metrics are written to `validation-output/combat-load-metrics.json`. Normal scenes do not load test instrumentation.
+
+See [Milestone 2.0.1 corrections and current acceptance evidence](docs/milestone-2.0.1.md) and the qualified [Milestone 2 architecture and historical validation](docs/milestone-2.md). Historical movement evidence remains in [Milestone 1.5.1](docs/milestone-1.5.1.md), [Milestone 1.5](docs/milestone-1.5.md) and [Milestone 1](docs/milestone-1.md). Every current stress route proves complete unsuperseded acceptance, new unit versions and captured assignments. Automated input playback and captured-frame inspection were performed; a human keyboard/mouse playtest was not performed.
 
 ## Scope and limits
 
 - Crowd avoidance reduces overlap but permits brief partial contact. It is not rigid vehicle collision. Tested units settle at distinct positions; difficult untested congestion can fail safely and accept a replacement order.
 - Navigation is for these flat, static fields. Slopes, dynamic navigation changes, opposing traffic through a gate, and crowds above 50 need separate validation.
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
-- No combat, economy, construction, AI, fog of war, factions, or other later systems are implemented. All visuals are original generated primitives.
+- Combat has no line of sight, cover, projectile/world collision, splash damage, armor multipliers or attack-move.
+- No economy, construction, production, fog of war, strategic AI or other later systems are implemented. All visuals are original generated primitives.
 
-Milestone 2 combat can begin within the validated flat, static 30–50-unit scope. Physical-input feel, opposing traffic and varied terrain remain separate validation work; none of those later features are implemented here.
+Suggested Milestone 2.5: physical-input combat playtesting and focused line-of-fire/obstacle validation. Movement on opposing traffic and varied terrain remains separate work. No later milestone was started.

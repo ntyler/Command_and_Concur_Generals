@@ -3,10 +3,22 @@ extends CharacterBody3D
 ## Identity and motion live here; selection membership belongs to SelectionController.
 
 @export var unit_id: int = 0
-@export var owner_id: int = 1
+@export var owner_id: int = 1:
+	set(value):
+		if owner_id != value:
+			owner_id = value
+			availability_changed.emit()
 @export var movement_speed: float = 5.0
 @export var stopping_distance: float = 0.22
 @export var show_destination: bool = true
+
+signal availability_changed
+@export_group("Combat (optional)")
+@export var combat_weapon: WeaponDefinition
+@export var maximum_health: float = 100.0
+@export var retaliation_enabled: bool = false
+var combat: CombatController
+var gameplay_field: TestField
 
 enum MovementState { ARRIVED, TRAVELLING, CONGESTED, RECOVERING, FAILED }
 signal movement_state_changed(state: MovementState)
@@ -133,6 +145,13 @@ func _ready() -> void:
 	debug_label.no_depth_test = true
 	add_child(debug_label)
 	set_movement_debug(false)
+	if combat_weapon != null:
+		combat = CombatController.new()
+		combat.unit = self
+		combat.retaliation_enabled = retaliation_enabled
+		add_child(combat)
+		if combat_weapon.mode == WeaponDefinition.Mode.HITSCAN:
+			_visual.scale = Vector3(0.65, 1.2, 0.65)
 
 
 func set_selected(selected: bool) -> void:
@@ -148,8 +167,20 @@ func _sync_crowd_mode() -> void:
 	agent.avoidance_enabled = crowd_enabled
 
 
-func move_to(destination: Vector3) -> void:
+func is_alive() -> bool:
+	return combat == null or (is_instance_valid(combat.health) and combat.health.is_alive())
+
+
+func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
+	if not is_alive() or not is_inside_tree() or is_queued_for_deletion():
+		return false
+	if combat != null and not TeamRules.is_combat_member(gameplay_field, self):
+		return false
+	var combat_version: int = -1
+	if combat != null and not combat_pursuit:
+		combat_version = combat.prepare_order(CombatController.PlayerCommand.MOVE)
 	order_version += 1
+	var moving_order := order_version
 	_submitted_order = -1
 	velocity = Vector3.ZERO
 	agent.velocity = Vector3.ZERO
@@ -175,6 +206,71 @@ func move_to(destination: Vector3) -> void:
 	destination_indicator.visible = show_destination and movement_debug
 	# Listeners may synchronously replace this order. Do not write after emission.
 	_set_state(MovementState.TRAVELLING)
+	if combat_version >= 0 and order_version == moving_order:
+		combat.publish_state(combat_version)
+	return true
+
+
+func retarget_pursuit(destination: Vector3) -> bool:
+	# Refresh one existing movement order; player orders still use move_to().
+	if not moving or not is_inside_tree() or is_queued_for_deletion() or not is_alive():
+		return false
+	if not TeamRules.is_combat_member(gameplay_field, self):
+		return false
+	# Carry signed progress/debt across the changed distance metric. Both path
+	# queries use this same position, so target movement itself earns no progress.
+	# Keeping debt also prevents back-and-forth motion resetting the stall clock.
+	var old_remaining := _remaining_path_length()
+	var progress := _progress_remaining - old_remaining if is_finite(_progress_remaining) and is_finite(old_remaining) else 0.0
+	var was_repath := recovery_active and recovery_target == assigned_destination
+	assigned_destination = destination
+	_progress_remaining = _remaining_path_length() + progress
+	_submitted_order = -1
+	# A genuine detour retains its waypoint, priority and expiry. A fallback
+	# repath follows the refreshed destination without becoming a new attempt.
+	if was_repath:
+		recovery_target = destination
+	if not recovery_active or was_repath:
+		agent.target_position = destination
+		next_waypoint = global_position
+	destination_indicator.global_position = destination + Vector3.UP * 0.055
+	return true
+
+
+func halt_motion() -> void:
+	# Internal stop at the current navigable position, also used for death cleanup.
+	if not is_inside_tree() or not is_instance_valid(agent):
+		return
+	order_version += 1
+	assigned_destination = global_position
+	recovery_attempts = 0
+	command_elapsed = 0.0
+	last_recovery_time = -INF
+	_progress_remaining = 0.0
+	agent.set_velocity_forced(Vector3.ZERO)
+	if destination_indicator.is_inside_tree():
+		destination_indicator.global_position = assigned_destination + Vector3.UP * 0.055
+	_finish_move()
+
+
+func stop() -> bool:
+	if not is_alive() or not is_inside_tree() or is_queued_for_deletion():
+		return false
+	if combat != null:
+		return combat.issue_stop()
+	halt_motion()
+	return true
+
+
+func face_toward(point: Vector3, radians_per_second: float, delta: float) -> void:
+	var direction := point - global_position
+	if direction.length_squared() > 0.000001:
+		_visual.rotation.y = rotate_toward(_visual.rotation.y, atan2(-direction.x, -direction.z), radians_per_second * delta)
+
+
+func facing_error(point: Vector3) -> float:
+	var direction := point - global_position
+	return absf(angle_difference(_visual.rotation.y, atan2(-direction.x, -direction.z)))
 
 
 func _physics_process(delta: float) -> void:

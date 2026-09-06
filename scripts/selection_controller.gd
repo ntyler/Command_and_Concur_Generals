@@ -3,6 +3,8 @@ extends Node
 
 signal selection_changed(count: int)
 signal move_requested(destination: Vector3)
+signal attack_requested(target: RTSUnit)
+signal stop_requested
 
 @export var friendly_owner_id: int = 1
 @export var drag_threshold: float = 6.0
@@ -46,6 +48,13 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# GUI gets first refusal. Pointer hover filters mouse commands, not an
+	# otherwise unhandled keyboard Stop (a focused control can still consume it).
+	if event.is_action_pressed("unit_stop") and not event.is_echo():
+		cancel_gesture()
+		_pending_picks.append({"kind": "stop"})
+		get_viewport().set_input_as_handled()
+		return
 	if camera_rig.pointer_over_interface():
 		return
 	if event.is_action_pressed("select_units"):
@@ -76,15 +85,23 @@ func _physics_process(_delta: float) -> void:
 	_prune_selection()
 	# Ray queries belong to the physics tick; queued input keeps selection/command order.
 	for request in _pending_picks:
+		if request["kind"] == "stop":
+			stop_requested.emit()
+			continue
 		var point: Vector2 = request["position"]
 		if request["kind"] == "select":
 			var hit := _raycast(point, 1 | 2 | 4)
 			var unit: RTSUnit = hit.get("collider") as RTSUnit
 			select_clicked(unit, request["additive"])
 		elif not _selected.is_empty():
-			var hit := _raycast(point, 1 | 4)
-			if not hit.is_empty() and (hit["collider"] as CollisionObject3D).collision_layer & 1:
-				move_requested.emit(hit["position"])
+			var hit := _raycast(point, 1 | 2 | 4)
+			if not hit.is_empty():
+				var target := hit["collider"] as RTSUnit
+				if target != null:
+					if TeamRules.is_hostile_target(gameplay_field, friendly_owner_id, target):
+						attack_requested.emit(target)
+				elif (hit["collider"] as CollisionObject3D).collision_layer & 1:
+					move_requested.emit(hit["position"])
 	_pending_picks.clear()
 
 
@@ -149,7 +166,7 @@ func _add(unit: RTSUnit) -> void:
 
 
 func _can_select(unit: RTSUnit) -> bool:
-	return is_instance_valid(gameplay_field) and gameplay_field.contains_unit(unit) and unit.owner_id == friendly_owner_id
+	return TeamRules.is_controlled(gameplay_field, unit, friendly_owner_id)
 
 
 func forget_unit(unit: RTSUnit) -> void:

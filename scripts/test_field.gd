@@ -23,6 +23,7 @@ var field_bounds: Rect2 = MAP_BOUNDS
 var obstacles: Array[Rect2] = OBSTACLES.duplicate()
 
 var units: Array[RTSUnit] = []
+var _registered: Dictionary[int, RTSUnit] = {}
 var camera_rig: RTSCamera
 var selection: SelectionController
 var destinations: GroupDestinations
@@ -30,6 +31,9 @@ var navigation_region: NavigationRegion3D
 var status_label: Label
 var info_panel: PanelContainer
 var last_command_slots := PackedVector3Array()
+var last_command_result: CommandBatchResult
+var _command_version: int = 0
+var _next_command_generation: int = 0
 
 
 func _ready() -> void:
@@ -42,15 +46,9 @@ func _ready() -> void:
 	movement_debug = movement_debug or OS.get_cmdline_user_args().has("--movement-debug")
 	_build_field()
 	_build_navigation()
-	var count := stress_unit_count if stress_layout else 12
+	var count := _unit_count()
 	for index in count:
-		var unit := RTSUnit.new()
-		unit.unit_id = index + 1
-		unit.name = "Unit%02d" % unit.unit_id
-		if stress_layout:
-			unit.position = Vector3(-29 + (index % 5) * 1.8, 0, 5 + (index / 5) * 1.8)
-		else:
-			unit.position = Vector3(-18 + (index % 4) * 2.5, 0, 10 + (index / 4) * 2.5)
+		var unit := _create_unit(index)
 		add_child(unit)
 		register_unit(unit)
 		unit.set_movement_debug(movement_debug)
@@ -73,7 +71,25 @@ func _ready() -> void:
 	add_child(selection)
 	selection.selection_changed.connect(_on_selection_changed)
 	selection.move_requested.connect(issue_move)
-	print("FIELD_READY: %d friendly units, %d obstacles; Godot %s" % [units.size(), obstacles.size(), Engine.get_version_info()["string"]])
+	selection.attack_requested.connect(issue_attack)
+	selection.stop_requested.connect(issue_stop)
+	var unit_label := "combat units" if not units.is_empty() and units[0].combat != null else "friendly units"
+	print("FIELD_READY: %d %s, %d obstacles; Godot %s" % [units.size(), unit_label, obstacles.size(), Engine.get_version_info()["string"]])
+
+
+func _unit_count() -> int:
+	return stress_unit_count if stress_layout else 12
+
+
+func _create_unit(index: int) -> RTSUnit:
+	var unit := RTSUnit.new()
+	unit.unit_id = index + 1
+	unit.name = "Unit%02d" % unit.unit_id
+	if stress_layout:
+		unit.position = Vector3(-29 + (index % 5) * 1.8, 0, 5 + (index / 5) * 1.8)
+	else:
+		unit.position = Vector3(-18 + (index % 4) * 2.5, 0, 10 + (index / 4) * 2.5)
+	return unit
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -90,14 +106,16 @@ func set_movement_debug(enabled: bool) -> void:
 
 
 func contains_unit(unit: RTSUnit) -> bool:
-	return is_instance_valid(unit) and unit.is_inside_tree() and not unit.is_queued_for_deletion() and is_ancestor_of(unit)
+	return not is_queued_for_deletion() and is_instance_valid(unit) and unit.is_inside_tree() and not unit.is_queued_for_deletion() and unit.is_alive() and _registered.has(unit.get_instance_id()) and is_ancestor_of(unit)
 
 
 func register_unit(unit: RTSUnit) -> void:
-	if not contains_unit(unit):
+	if not is_instance_valid(unit) or not unit.is_inside_tree() or unit.is_queued_for_deletion() or not unit.is_alive() or not is_ancestor_of(unit):
 		return
-	if not units.has(unit):
+	if not _registered.has(unit.get_instance_id()):
+		_registered[unit.get_instance_id()] = unit
 		units.append(unit)
+	unit.gameplay_field = self
 	var exiting := _on_unit_exiting.bind(unit)
 	if not unit.tree_exiting.is_connected(exiting):
 		unit.tree_exiting.connect(exiting)
@@ -106,16 +124,91 @@ func register_unit(unit: RTSUnit) -> void:
 
 
 func _on_unit_exiting(unit: RTSUnit) -> void:
+	unregister_unit(unit)
+
+
+func unregister_unit(unit: RTSUnit) -> void:
+	if not is_instance_valid(unit) or not _registered.has(unit.get_instance_id()):
+		return
+	_registered.erase(unit.get_instance_id())
 	units.erase(unit)
+	unit.gameplay_field = null
 	if is_instance_valid(selection):
 		selection.forget_unit(unit)
+		_on_selection_changed(selection.selected_units().size())
+	unit.availability_changed.emit()
 
 
-func issue_move(clicked: Vector3) -> bool:
+func _new_batch() -> CommandBatchResult:
+	_next_command_generation += 1
+	var result := CommandBatchResult.new()
+	result.generation = _next_command_generation
+	return result
+
+
+func _batch_selection(result: CommandBatchResult) -> Array[RTSUnit]:
+	# Selection pruning can synchronously accept a newer command. Capture its
+	# authority before querying; rejected nested requests do not steal authority.
+	var authority := _command_version
 	var selected := selection.selected_units()
-	if selected.is_empty():
-		return false
+	for unit in selected:
+		result.intended_ids.append(unit.unit_id)
+	result.superseded = authority != _command_version
+	return selected
+
+
+func _finish_batch(result: CommandBatchResult, description: String) -> CommandBatchResult:
+	result.superseded = result.generation != _command_version
+	if not result.superseded:
+		last_command_result = result
+		status_label.text = "%02d/%02d accepted  /  %s" % [result.accepted_ids.size(), result.intended_ids.size(), description]
+	return result
+
+
+func issue_attack(target: RTSUnit) -> CommandBatchResult:
+	var result := _new_batch()
+	var selected := _batch_selection(result)
+	if result.superseded or selected.is_empty():
+		return result
+	for unit in selected:
+		if not TeamRules.can_attack(self, unit, target) or not unit.combat.weapon.definition.is_valid():
+			return result
+	_command_version = result.generation
+	for i in selected.size():
+		if result.generation != _command_version:
+			break
+		var unit := selected[i]
+		# A previous member's callback may have freed either reference. Check
+		# validity before passing it into a typed method or reading its identity.
+		if not is_instance_valid(unit) or not contains_unit(unit) or not is_instance_valid(target):
+			continue
+		if unit.combat.issue_attack(target):
+			result.accepted_ids.append(result.intended_ids[i])
+	return _finish_batch(result, "Attack order")
+
+
+func issue_stop() -> CommandBatchResult:
+	var result := _new_batch()
+	var selected := _batch_selection(result)
+	if result.superseded or selected.is_empty():
+		return result
+	_command_version = result.generation
+	for i in selected.size():
+		if result.generation != _command_version:
+			break
+		var unit := selected[i]
+		if is_instance_valid(unit) and contains_unit(unit) and unit.stop():
+			result.accepted_ids.append(result.intended_ids[i])
+	return _finish_batch(result, "Stopped")
+
+
+func issue_move(clicked: Vector3) -> CommandBatchResult:
+	var result := _new_batch()
+	var selected := _batch_selection(result)
+	if result.superseded or selected.is_empty():
+		return result
 	selected.sort_custom(func(a: RTSUnit, b: RTSUnit) -> bool: return a.unit_id < b.unit_id)
+	result.intended_ids.sort()
 	var map := get_world_3d().get_navigation_map()
 	var selected_ids: Dictionary[int, bool] = {}
 	for unit in selected:
@@ -127,21 +220,30 @@ func issue_move(clicked: Vector3) -> bool:
 	var slots := destinations.generate_slots(map, clicked, selected.size(), reserved)
 	if slots.size() != selected.size():
 		status_label.text = "%02d selected  /  No room for destinations" % selected.size()
-		return false
+		return result
 	var assigned := destinations.assign_slots(selected, slots)
 	# Reject an unreachable command atomically; keep the previous order intact.
 	for i in selected.size():
 		var path := NavigationServer3D.map_get_path(map, selected[i].global_position, assigned[i], true)
 		if path.is_empty() or path[path.size() - 1].distance_to(assigned[i]) > 0.1:
 			status_label.text = "%02d selected  /  Destination unreachable" % selected.size()
-			return false
-	last_command_slots = assigned
+			return result
+	_command_version = result.generation
 	for i in selected.size():
-		if not contains_unit(selected[i]):
-			return false
-		selected[i].move_to(assigned[i])
-	status_label.text = "%02d selected  /  Move order issued" % selected.size()
-	return true
+		if result.generation != _command_version:
+			break
+		var unit := selected[i]
+		if not is_instance_valid(unit) or not contains_unit(unit):
+			continue
+		if unit.move_to(assigned[i]):
+			var id := result.intended_ids[i]
+			result.accepted_ids.append(id)
+			result.assignments[id] = assigned[i]
+	if result.generation == _command_version:
+		last_command_slots.clear()
+		for id in result.accepted_ids:
+			last_command_slots.append(result.assignments[id])
+	return _finish_batch(result, "Move order")
 
 
 func _build_field() -> void:
@@ -273,7 +375,10 @@ func _build_feedback() -> void:
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(title)
 	var controls := Label.new()
-	controls.text = "WASD / arrows / screen edges  ·  Pan\nMouse wheel  ·  Zoom\nLeft click / drag  ·  Select\nShift + click  ·  Toggle    Shift + drag  ·  Add\nRight click  ·  Move    Esc  ·  Cancel drag\nF3  ·  Movement debug"
+	controls.text = "WASD / arrows / screen edges  ·  Pan\nMouse wheel  ·  Zoom\nLeft click / drag  ·  Select\nShift + click  ·  Toggle    Shift + drag  ·  Add\nRight click ground  ·  Move    X  ·  Stop\nEsc  ·  Cancel drag    F3  ·  Movement debug"
+	if units.size() > 0 and units[0].combat != null:
+		title.text = "FIELDWORK  /  COMBAT LAB"
+		controls.text += "\nRight click hostile  ·  Attack\nAlpha: mint    Bravo: coral\nRange only: no cover or line of sight"
 	controls.add_theme_font_size_override("font_size", 14)
 	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(controls)

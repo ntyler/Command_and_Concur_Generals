@@ -94,12 +94,12 @@ func _assignment_checks(count: int) -> void:
 	var radius := field.destinations.maximum_radius
 	field.destinations.maximum_radius = 0.5
 	var before := field.units[0].order_version
-	field.issue_move(Vector3(8, 0, 0))
+	_check(not field.issue_move(Vector3(8, 0, 0)).has_acceptance(), "insufficient slots report no accepted recipients")
 	_check(field.units[0].order_version == before, "insufficient compact slots preserve old orders")
 	field.destinations.maximum_radius = radius
 	var first := field.units[0]
 	field.selection.select_clicked(first, false)
-	field.issue_move(field.units[1].global_position)
+	_check(field.issue_move(field.units[1].global_position).is_complete(), "subgroup reservation command is completely accepted")
 	_check(first.assigned_destination.distance_to(field.units[1].global_position) >= field.destinations.slot_spacing - 0.001, "new subgroup order respects unselected units' reserved destinations")
 	for unit in field.units:
 		if unit != first:
@@ -126,7 +126,8 @@ func _route(label: String, target: Vector3, timeout: float, gate: bool = false) 
 	var versions: Array[int] = []
 	for unit in command_units:
 		versions.append(unit.order_version)
-	var accepted := field.issue_move(target)
+	var batch := field.issue_move(target)
+	var accepted := batch.is_complete() and not batch.superseded
 	_check(accepted, label + ": group command accepted")
 	if not accepted:
 		return {}
@@ -134,7 +135,11 @@ func _route(label: String, target: Vector3, timeout: float, gate: bool = false) 
 	var new_orders := command_units.size() == field.units.size()
 	for i in command_units.size():
 		new_orders = new_orders and command_units[i].order_version == versions[i] + 1
-		assignments.append(command_units[i].assigned_destination)
+		var id := command_units[i].unit_id
+		new_orders = new_orders and batch.accepted_ids.has(id) and batch.assignments.has(id)
+		if batch.assignments.has(id):
+			assignments.append(batch.assignments[id])
+			new_orders = new_orders and command_units[i].assigned_destination == batch.assignments[id]
 	_check(new_orders, label + ": every intended unit received a new order version")
 	if not new_orders:
 		return {}

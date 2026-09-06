@@ -229,7 +229,7 @@ func _movement_checks() -> void:
 	await _click(Vector2(1278, 2), MOUSE_BUTTON_RIGHT)
 	_check(field.last_command_slots == previous, "click outside ground fails safely")
 	# A second long route exercises the other side of the map and both eastern obstacles.
-	field.issue_move(Vector3(18, 0, 15))
+	_check(field.issue_move(Vector3(18, 0, 15)).is_complete(), "second route accepts every intended recipient")
 	for frame in range(1800):
 		await physics_frame
 		var still_moving := false
