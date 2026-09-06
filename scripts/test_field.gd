@@ -275,12 +275,15 @@ func _build_field() -> void:
 	for x in [field_bounds.position.x, field_bounds.end.x]:
 		_box(Vector3(0.35, 0.5, size.y), Vector3(x, 0.1, 0), Color("d1b777"), 4)
 	for i in obstacles.size():
-		var rectangle := obstacles[i]
-		var center := rectangle.get_center()
-		var height := 1.8 + i * 0.4
-		_box(Vector3(rectangle.size.x, height, rectangle.size.y), Vector3(center.x, height / 2.0, center.y), Color("8b7866"), 4 | LineOfFire.BLOCKER_MASK)
-		var cap_size := Vector2(maxf(rectangle.size.x - 0.3, rectangle.size.x * 0.5), maxf(rectangle.size.y - 0.3, rectangle.size.y * 0.5))
-		_box(Vector3(cap_size.x, 0.08, cap_size.y), Vector3(center.x, height + 0.04, center.y), Color("c4a17a"))
+		_build_obstacle(i, obstacles[i])
+
+
+func _build_obstacle(index: int, rectangle: Rect2) -> void:
+	var center := rectangle.get_center()
+	var height := 1.8 + index * 0.4
+	_box(Vector3(rectangle.size.x, height, rectangle.size.y), Vector3(center.x, height / 2.0, center.y), Color("8b7866"), 4 | LineOfFire.BLOCKER_MASK)
+	var cap_size := Vector2(maxf(rectangle.size.x - 0.3, rectangle.size.x * 0.5), maxf(rectangle.size.y - 0.3, rectangle.size.y * 0.5))
+	_box(Vector3(cap_size.x, 0.08, cap_size.y), Vector3(center.x, height + 0.04, center.y), Color("c4a17a"))
 
 
 func _build_navigation() -> void:

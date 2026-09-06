@@ -2,6 +2,17 @@ class_name RTSUnit
 extends CharacterBody3D
 ## Identity and motion live here; selection membership belongs to SelectionController.
 
+const BODY_RADIUS: float = 0.43
+const BODY_HEIGHT: float = 1.3
+const BODY_CENTER := Vector3(0, BODY_HEIGHT / 2.0, 0)
+
+
+static func body_shape() -> CapsuleShape3D:
+	var shape := CapsuleShape3D.new()
+	shape.radius = BODY_RADIUS
+	shape.height = BODY_HEIGHT
+	return shape
+
 @export var unit_id: int = 0
 @export var owner_id: int = 1:
 	set(value):
@@ -87,11 +98,8 @@ func _ready() -> void:
 	collision_mask = 4
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	var collider := CollisionShape3D.new()
-	var shape := CapsuleShape3D.new()
-	shape.radius = 0.43
-	shape.height = 1.3
-	collider.shape = shape
-	collider.position.y = 0.65
+	collider.shape = body_shape()
+	collider.position = BODY_CENTER
 	add_child(collider)
 	_visual = Node3D.new()
 	add_child(_visual)

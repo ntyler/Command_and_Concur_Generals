@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/rts_unit.gd" id="1"]
+[ext_resource type="Resource" path="res://weapons/rifle.tres" id="2"]
+
+[node name="RifleUnit" type="CharacterBody3D"]
+script = ExtResource("1")
+combat_weapon = ExtResource("2")

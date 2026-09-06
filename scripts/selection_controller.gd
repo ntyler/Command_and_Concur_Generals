@@ -13,6 +13,7 @@ var camera_rig: RTSCamera
 var gameplay_field: TestField
 var selection_box: ReferenceRect
 var _selected: Array[RTSUnit] = []
+var _selected_building: RTSBuilding
 var _press_position: Vector2
 var _current_position: Vector2
 var _pressed: bool = false
@@ -91,8 +92,17 @@ func _physics_process(_delta: float) -> void:
 		var point: Vector2 = request["position"]
 		if request["kind"] == "select":
 			var hit := _raycast(point, 1 | 2 | 4)
-			var unit: RTSUnit = hit.get("collider") as RTSUnit
-			select_clicked(unit, request["additive"])
+			var building := hit.get("collider") as RTSBuilding
+			if _can_select_building(building):
+				select_building(building)
+			else:
+				var unit: RTSUnit = hit.get("collider") as RTSUnit
+				select_clicked(unit, request["additive"])
+		elif selected_building() != null:
+			var building := selected_building()
+			var hit := _raycast(point, 1 | 2 | 4)
+			if building.production != null and not hit.is_empty() and (hit["collider"] as CollisionObject3D).collision_layer & 1:
+				building.production.set_rally(friendly_owner_id, hit["position"])
 		elif not _selected.is_empty():
 			var hit := _raycast(point, 1 | 2 | 4)
 			if not hit.is_empty():
@@ -107,6 +117,8 @@ func _physics_process(_delta: float) -> void:
 
 func select_clicked(unit: RTSUnit, additive: bool) -> void:
 	_prune_selection()
+	if _can_select(unit):
+		_clear_building()
 	if not _can_select(unit):
 		if not additive:
 			_clear()
@@ -121,6 +133,7 @@ func select_clicked(unit: RTSUnit, additive: bool) -> void:
 
 
 func select_rectangle(rectangle: Rect2, additive: bool) -> void:
+	_clear_building()
 	if not additive:
 		_clear()
 	var normalized := rectangle.abs()
@@ -153,6 +166,7 @@ func _update_rectangle() -> void:
 
 
 func _clear() -> void:
+	_clear_building()
 	for unit in _selected:
 		if is_instance_valid(unit):
 			unit.set_selected(false)
@@ -179,12 +193,45 @@ func forget_unit(unit: RTSUnit) -> void:
 
 func _prune_selection() -> void:
 	var count := _selected.size()
+	var building_changed := _selected_building != null and (not is_instance_valid(_selected_building) or not _can_select_building(_selected_building))
+	if building_changed:
+		_clear_building()
 	for i in range(_selected.size() - 1, -1, -1):
 		if not _can_select(_selected[i]):
 			if is_instance_valid(_selected[i]):
 				_selected[i].set_selected(false)
 			_selected.remove_at(i)
-	if count != _selected.size():
+	if count != _selected.size() or building_changed:
+		selection_changed.emit(_selected.size())
+
+
+func selected_building() -> RTSBuilding:
+	return _selected_building if is_instance_valid(_selected_building) and _can_select_building(_selected_building) else null
+
+
+func select_building(building: RTSBuilding) -> void:
+	if not _can_select_building(building):
+		return
+	_clear()
+	_selected_building = building
+	building.set_selected(true)
+	# Unit and building state is already coherent when existing listeners run.
+	selection_changed.emit(0)
+
+
+func _can_select_building(building: RTSBuilding) -> bool:
+	return is_instance_valid(building) and gameplay_field is ProductionField and (gameplay_field as ProductionField).contains_building(building) and building.owner_id == friendly_owner_id
+
+
+func _clear_building() -> void:
+	if is_instance_valid(_selected_building):
+		_selected_building.set_selected(false)
+	_selected_building = null
+
+
+func prune_building() -> void:
+	if _selected_building != null and (not is_instance_valid(_selected_building) or not _can_select_building(_selected_building)):
+		_clear_building()
 		selection_changed.emit(_selected.size())
 
 

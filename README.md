@@ -1,6 +1,6 @@
 # Fieldwork — RTS prototype
 
-An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5 adds static weapon blockers, blocked holding and swept projectile/world collision.
+An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production.
 
 Open `project.godot` in Godot and press **F6** with `scenes/test_field.tscn` open, or **F5** to run the configured main scene. There is no asset download, plugin installation, navigation bake, or build step. The field and its navigation mesh are generated together at scene startup.
 
@@ -33,6 +33,10 @@ The separate `scenes/line_of_fire_test.tscn` can also be launched with F6 or `& 
 
 Exact engine used: `4.7.2.stable.official.ed1daf0bf`. The standard portable Windows build was installed after the user confirmed Godot needed installation. No global PATH or file associations were changed.
 
+To play production, open `scenes/production_test.tscn` and press **F6**, or run `& $godot --path . res://scenes/production_test.tscn`. Click your western barracks, press **Train Rifle Unit**, and watch the unit deploy after five simulated seconds and move to its rally point. With the barracks selected, right-click ground to change the rally. Select the produced unit and right-click a coral hostile to fight. The headquarters displays identity, owner and credits. Both fixed buildings block navigation and weapon fire and cannot be attacked.
+
+Each owner starts with **1000 integer credits**. A Rifle costs **100**, takes **5 simulated seconds**, and occupies one of **5 queue slots**, including the active or completed-but-blocked job. Barracks sharing an owner use the same field-local balance. Training is FIFO, one active job per barracks. Cancel any undeployed job for its original full payment exactly once. A blocked exit holds the head at 100%, displays **Exit blocked**, and retries every **0.25 simulated seconds** without charging again or training later jobs. Six bounded local candidates must pass navigation and full Rifle-capsule clearance. Deployment removes the job before completion callbacks; subsequent unit death or rally rejection cannot refund it. See [Milestone 3](docs/milestone-3.md) for lifecycle details and validation.
+
 ## Controls
 
 | Input | Behavior |
@@ -51,8 +55,13 @@ Exact engine used: `4.7.2.stable.official.ed1daf0bf`. The standard portable Wind
 | Escape | Cancel the current selection gesture |
 | F3 | Toggle movement debugging and combat firing lines |
 | T (line-of-fire scene only) | Move the marked rocket target into/out of the wall shadow |
+| Click or Shift-click an owned building (production scene) | Select that building alone and clear unit selection |
+| Right click ground with barracks selected | Set rally for future deployments; preserve current units' orders |
+| Train / Cancel in barracks panel | Enqueue a paid Rifle / refund that undeployed job |
 
 The controls panel consumes pointer input and suspends camera movement while hovered. X still stops selected units over this passive panel; a focused UI control that consumes X keeps the event. Releasing a drag over it cancels the gesture. Losing application focus or leaving the window also cancels a drag. Shift is sampled when a selection gesture begins. Shift-clicking empty ground preserves selection. Clicks on obstacles or beyond the ground issue no move order; ground points near the boundary are projected onto navigation.
+
+Building selection is separate from the unit-only `selected_units()` API. Selecting units, dragging a selection box, or normally clicking empty ground clears the building. Hostile buildings cannot be selected. Barracks do not issue attacks; X never cancels production. Production GUI controls consume pointer events and validate current membership/ownership again when activated.
 
 Mint rings indicate selected units. Movement debugging is off by default. F3 (or `--movement-debug`) shows amber final destinations, blue current waypoints, and labels with state, stalled time and retry count. Markers remain available after arrival. Every unit has one stable numeric identity. Existing `owner_id` is also the team ID: `1` for Alpha and `2` for Bravo; the movement fields contain only team 1. The original and combat cameras begin at ground focus `(0, 0, 0)`, zoom `52`, with focus bounds `x = ±29`, `z = ±23`. The stress camera uses the same angle, focus `(0, 0, 0)`, zoom `62`, and bounds `x = ±35`, `z = ±27`. The elevated Camera3D is offset behind its ground focus.
 
@@ -102,6 +111,10 @@ Attempted travel is clipped to both target aim and remaining lifetime. An alread
 | `scripts/guided_projectile.gd`, `scripts/combat_feedback.gd` | Independent projectile travel/impact and team/health/tracer presentation |
 | `tests/combat_checks.gd`, `tests/engine_error_probe.gd` | Combat integration/load tests and engine-error capture through teardown |
 | `scripts/command_batch_result.gd`, `tests/combat_repair_checks.gd` | Historical batch acceptance values and focused command/lifecycle regressions |
+| `scripts/production_field.gd`, `scripts/rts_building.gd` | Fixed base geometry, initial navigation footprints, producer membership and safe spawn admission |
+| `scripts/player_credits.gd`, `scripts/unit_production.gd`, `scripts/production_result.gd` | Field-local funds, isolated FIFO jobs, captured refunds and explicit acceptance |
+| `scripts/production_definition.gd`, `production/rifle.tres`, `scenes/rifle_unit.tscn` | Shared recipe and the existing Rifle configuration; no mutable jobs in Resources |
+| `scripts/production_panel.gd`, `tests/production_checks.gd` | Minimal GUI and production, input, lifecycle and combat integration checks |
 
 The field partitions a flat `NavigationMesh` at obstacle edges expanded by 0.85 units, producing connected convex polygons with holes. Geometry and navigation use the same obstacle definitions. Agents advance along navigation paths in physics ticks; step lengths are bounded to prevent overshoot and positions stay on the clearance mesh. `CharacterBody3D` collisions provide an additional solid obstacle boundary.
 
@@ -140,6 +153,8 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/line_of_fire_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/spherical_projectile_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/spherical_projectile_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/production_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/production_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
@@ -164,6 +179,6 @@ See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/m
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
 - Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
-- No economy, construction, production, fog of war, strategic AI or other later systems are implemented. All visuals are original generated primitives.
+- The production scene has starting credits and fixed-base Rifle queues only. No harvesting, player construction, building destruction/capture/sale, vehicles from production, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
 
-Physical-input combat playtesting, opposing traffic and varied terrain remain separate work. Milestone 2.5.1 corrects collision volume and final-tick handling only; no later gameplay systems were added.
+Physical-input production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to fixed flat geometry, normal simulation timing and a small local exit search; neither physics lockstep determinism nor universal frame-rate behavior is claimed.
