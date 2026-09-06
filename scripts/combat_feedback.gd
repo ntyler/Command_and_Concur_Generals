@@ -12,6 +12,7 @@ var fire_blocked: bool = false
 var _last_fire_line: LineOfFire.Trace
 var _fire_segment: MeshInstance3D
 var _fire_contact: MeshInstance3D
+var _launch_volume: MeshInstance3D
 var _body_materials: Array[StandardMaterial3D] = []
 
 
@@ -108,6 +109,8 @@ func refresh_fire_debug() -> void:
 		if is_instance_valid(_fire_segment):
 			_fire_segment.hide()
 			_fire_contact.hide()
+		if is_instance_valid(_launch_volume):
+			_launch_volume.hide()
 		return
 	if not is_instance_valid(_fire_segment):
 		_fire_segment = MeshInstance3D.new()
@@ -133,6 +136,24 @@ func refresh_fire_debug() -> void:
 	_fire_segment.show()
 	_fire_contact.position = to_local(_last_fire_line.position)
 	_fire_contact.visible = _last_fire_line.blocked
+	if unit.combat.weapon.definition.mode == WeaponDefinition.Mode.GUIDED_PROJECTILE:
+		if not is_instance_valid(_launch_volume):
+			_launch_volume = MeshInstance3D.new()
+			_launch_volume.mesh = SphereMesh.new()
+			var material := StandardMaterial3D.new()
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.albedo_color = Color(0.3, 0.9, 1.0, 0.45)
+			material.no_depth_test = true
+			_launch_volume.material_override = material
+			add_child(_launch_volume)
+		var volume := _launch_volume.mesh as SphereMesh
+		volume.radius = unit.combat.weapon.definition.projectile_collision_radius
+		volume.height = volume.radius * 2.0
+		_launch_volume.position = to_local(LineOfFire.muzzle(unit))
+		_launch_volume.show()
+	elif is_instance_valid(_launch_volume):
+		_launch_volume.hide()
 
 
 static func world_impact(field: TestField, contact: Vector3) -> void:

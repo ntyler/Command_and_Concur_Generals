@@ -29,7 +29,7 @@ To play combat, open `scenes/combat_test.tscn` and press F6, or run:
 
 Team Alpha is mint and player-controlled; Team Bravo is coral and retaliates when damaged. Each team starts with four Rifle Units and two Rocket Vehicles, at fixed positions around two obstacles. Select Alpha units, right-click a Bravo unit, and watch them approach, face and fire. Ground movement, X Stop, or another attack target interrupts the order. Hostiles do not initiate attacks or search for targets on their own.
 
-The separate `scenes/line_of_fire_test.tscn` can also be launched with F6 or `& $godot --path . res://scenes/line_of_fire_test.tscn`. It has clear and blocked Rifle lanes, an opening, a wall behind a target, a Rocket lane with a wall-shadow route, and a 20 mm wall. Bravo retaliation is off in this geometry lab. After ordering the marked Rocket Vehicle to attack, press **T** to move its target into or out of the wall shadow using ordinary movement. F3 adds firing segments and contact markers; normal blocked labels remain visible with debugging off.
+The separate `scenes/line_of_fire_test.tscn` can also be launched with F6 or `& $godot --path . res://scenes/line_of_fire_test.tscn`. It has clear and blocked Rifle lanes, an opening, a wall behind a target, a Rocket lane with a wall-shadow route, and a 20 mm wall. Bravo retaliation is off in this geometry lab. After ordering the marked Rocket Vehicle to attack, press **T** to move its target into or out of the wall shadow using ordinary movement. F3 adds firing segments, contact markers and the configured rocket launch sphere; normal blocked labels remain visible with debugging off.
 
 Exact engine used: `4.7.2.stable.official.ed1daf0bf`. The standard portable Windows build was installed after the user confirmed Godot needed installation. No global PATH or file associations were changed.
 
@@ -75,7 +75,9 @@ Marked static obstacles block both weapons. In-range attackers show **BLOCKED**,
 
 Physics layer 4, **Weapon Blockers** (mask 8), marks obstacle bodies in all fields. Ground, low boundary rails, decorative caps, units and visual feedback are excluded. A shared physics-step query checks body attachment (height 0.6) to muzzle (0.9), then muzzle to target aim (0.75). The emitter makes a fresh check before every committed shot. Input only issues commands; direct firing outside physics processing returns false.
 
-Rockets sweep their actual movement segment, clamped to the original target's aim point. Lifetime expiry takes priority at tick start, then target invalidation, then earliest world contact, then target arrival. A 0.0001-unit endpoint/origin skin resolves numerical ties conservatively in favor of a blocker. The visible rocket has point/centerline collision. Homing can hit a wall when a target moves behind it. This is line of fire; target awareness and selection are unchanged. There is no splash damage, cover bonus or attack-move.
+Rockets use a configurable **0.1-unit spherical world-collision radius**, copied at launch. Launch additionally requires that sphere to be clear. Flight explicitly checks initial overlaps and sweeps the full sphere using Godot shape queries. Query margin is a separate conservative **0.0001 units**. A centerline-clear rocket can graze a wall with its volume. The visible flying sphere matches the configured radius; F3 shows the launch volume.
+
+Attempted travel is clipped to both target aim and remaining lifetime. An already expired rocket cannot move; otherwise valid world/target contact within the usable interval resolves before expiry. World contact wins numerical ties with target arrival, while a sufficiently distant wall behind the target does not cancel damage. The original point target-arrival model and hitscan line queries remain unchanged. This is line of fire; target awareness and selection are unchanged. There is no splash damage, cover bonus or attack-move.
 
 ## Implementation
 
@@ -136,6 +138,8 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_repair_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/line_of_fire_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/line_of_fire_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/spherical_projectile_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/spherical_projectile_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
@@ -151,15 +155,15 @@ Graphical checks write screenshots to ignored `validation-output/`; stress check
 
 Combat validation combines real input, health, cooldown, order-version and physics assertions with eight graphical captures. Its engine-error probe fails the run on errors or warnings, including during field teardown. The separate `--combat-load` check starts 12 units per team, runs a fixed 12-second engagement, stops survivors and verifies outstanding projectile cleanup after their lifetime. Its metrics are written to `validation-output/combat-load-metrics.json`. Normal scenes do not load test instrumentation.
 
-See [Milestone 2.5 behavior, commands and acceptance evidence](docs/milestone-2.5.md), [Milestone 2.0.1 corrections](docs/milestone-2.0.1.md) and the qualified [Milestone 2 architecture and historical validation](docs/milestone-2.md). Historical movement evidence remains in [Milestone 1.5.1](docs/milestone-1.5.1.md), [Milestone 1.5](docs/milestone-1.5.md) and [Milestone 1](docs/milestone-1.md). Every current stress route proves complete unsuperseded acceptance, new unit versions and captured assignments. Automated input playback and captured-frame inspection were performed; a human keyboard/mouse playtest was not performed.
+See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/milestone-2.5.1.md), [Milestone 2.5 historical point-collision results](docs/milestone-2.5.md), [Milestone 2.0.1 corrections](docs/milestone-2.0.1.md) and the qualified [Milestone 2 architecture and historical validation](docs/milestone-2.md). Historical movement evidence remains in [Milestone 1.5.1](docs/milestone-1.5.1.md), [Milestone 1.5](docs/milestone-1.5.md) and [Milestone 1](docs/milestone-1.md). Every current stress route proves complete unsuperseded acceptance, new unit versions and captured assignments. Automated input playback and captured-frame inspection were performed; a human keyboard/mouse playtest was not performed.
 
 ## Scope and limits
 
 - Crowd avoidance reduces overlap but permits brief partial contact. It is not rigid vehicle collision. Tested units settle at distinct positions; difficult untested congestion can fail safely and accept a replacement order.
 - Navigation is for these flat, static fields. Slopes, dynamic navigation changes, opposing traffic through a gate, and crowds above 50 need separate validation.
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
-- Weapon obstruction supports marked static primitive convex shapes. Moving blockers, arbitrary concave meshes and volumetric ballistics are outside the tested scope. Other units do not intercept shots.
+- Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
 - No economy, construction, production, fog of war, strategic AI or other later systems are implemented. All visuals are original generated primitives.
 
-Physical-input combat playtesting, opposing traffic and varied terrain remain separate work. No systems beyond Milestone 2.5 were added.
+Physical-input combat playtesting, opposing traffic and varied terrain remain separate work. Milestone 2.5.1 corrects collision volume and final-tick handling only; no later gameplay systems were added.

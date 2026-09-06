@@ -25,7 +25,7 @@ func try_fire(target: RTSUnit) -> bool:
 		return false
 	if unit.facing_error(target.global_position) > deg_to_rad(definition.facing_tolerance_degrees):
 		return false
-	last_fire_line = unit.gameplay_field.fire_query.firing_line(unit, target)
+	last_fire_line = unit.gameplay_field.fire_query.weapon_clearance(unit, target, definition)
 	if not last_fire_line.is_clear():
 		return false
 	# No notification between this authoritative geometry check and commitment.

@@ -12,3 +12,4 @@ cooldown = 1.8
 facing_tolerance_degrees = 8.0
 projectile_speed = 9.0
 projectile_lifetime = 6.0
+projectile_collision_radius = 0.1

@@ -269,7 +269,7 @@ func _swept_geometry_checks() -> void:
 				speed = 1.5
 			"inside": origin.x = 18.01
 			"tie": target.global_position.x = 18.0
-			"expiry": life = 1.0 / 60.0
+			"expiry": life = 0.001 # Expires before reaching the wall, even on a partial tick.
 		target.halt_motion()
 		var rocket := _isolated_rocket(source, target, origin, speed, life)
 		var observed := _observe(rocket)
@@ -454,7 +454,7 @@ func _fire_load_checks() -> void:
 			if unit.combat.state == CombatController.State.BLOCKED: blocked += 1
 		blocked_seen = maxi(blocked_seen, blocked)
 	var query_limit := 24 * (ceili(12.0 / 0.2) + ceili(12.0 / 0.75) + 3)
-	var metrics := {"units_at_start": 24, "simulation_seconds": 12, "wall_ms": (Time.get_ticks_usec() - started) / 1000.0, "shots": tally["shots"], "damage": tally["damage"], "deaths": tally["deaths"], "survivors": field.units.size(), "peak_projectiles": peak, "active_projectiles": get_nodes_in_group("combat_projectiles").size(), "peak_blocked_units": blocked_seen, "maximum_pursuit_updates": maximum_updates, "clearance_queries": field.fire_query.clearance_queries, "clearance_query_limit": query_limit, "segment_queries": field.fire_query.segment_queries, "physics_queries": field.fire_query.physics_queries}
+	var metrics := {"units_at_start": 24, "simulation_seconds": 12, "wall_ms": (Time.get_ticks_usec() - started) / 1000.0, "shots": tally["shots"], "damage": tally["damage"], "deaths": tally["deaths"], "survivors": field.units.size(), "peak_projectiles": peak, "active_projectiles": get_nodes_in_group("combat_projectiles").size(), "peak_blocked_units": blocked_seen, "maximum_pursuit_updates": maximum_updates, "clearance_queries": field.fire_query.clearance_queries, "clearance_query_limit": query_limit, "segment_queries": field.fire_query.segment_queries, "sphere_queries": field.fire_query.sphere_queries, "physics_queries": field.fire_query.physics_queries}
 	_check(tally["shots"] > 0 and tally["damage"] > 0 and tally["deaths"] > 0 and blocked_seen > 0, "load observes firing, damage, deaths and intentional blocked holding")
 	_check(members_alive and peak <= 32 and maximum_updates == 0, "load preserves live membership, bounded projectiles and no unnecessary move dispatch")
 	_check(field.fire_query.clearance_queries <= query_limit, "controller rechecks plus committed attempts have bounded query cost")

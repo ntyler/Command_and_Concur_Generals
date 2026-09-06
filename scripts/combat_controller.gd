@@ -155,7 +155,7 @@ func _physics_process(delta: float) -> void:
 			return
 		_clearance_wait -= delta
 		if fire_line == null or _clearance_wait <= 0.000001:
-			fire_line = unit.gameplay_field.fire_query.firing_line(unit, target)
+			fire_line = unit.gameplay_field.fire_query.weapon_clearance(unit, target, weapon.definition)
 			_clearance_wait = blocked_recheck_interval
 			feedback.show_fire_line(fire_line)
 		if not fire_line.is_clear():

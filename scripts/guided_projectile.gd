@@ -10,6 +10,7 @@ var speed: float
 var lifetime: float
 var damage: float
 var source_team: int
+var collision_radius: float
 var spent: bool = false
 var outcome: Outcome = Outcome.NONE
 var contact_position: Vector3
@@ -28,14 +29,15 @@ func configure(field: TestField, source: RTSUnit, target: RTSUnit, definition: W
 	speed = definition.projectile_speed
 	lifetime = definition.projectile_lifetime
 	damage = definition.damage
+	collision_radius = definition.projectile_collision_radius
 
 
 func _ready() -> void:
 	add_to_group("combat_projectiles")
 	var visual := MeshInstance3D.new()
 	var mesh := SphereMesh.new()
-	mesh.radius = 0.22
-	mesh.height = 0.44
+	mesh.radius = collision_radius
+	mesh.height = collision_radius * 2.0
 	visual.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("ffd27a")
@@ -51,38 +53,49 @@ func target_unit() -> RTSUnit:
 func _physics_process(delta: float) -> void:
 	if spent:
 		return
-	age += delta
+	var remaining := lifetime - age
 	var field := _field.get_ref() as TestField
 	var target := target_unit()
-	if age >= lifetime:
-		_finish(Outcome.EXPIRED) # Lifetime has priority at the start of this tick.
+	if remaining <= 0.0:
+		_finish(Outcome.EXPIRED)
 		return
 	if not TeamRules.is_hostile_target(field, source_team, target):
 		_finish(Outcome.INVALIDATED)
 		return
 	var aim := LineOfFire.aim(target)
+	var step := minf(delta, remaining)
+	if step <= 0.0:
+		return
 	last_segment_start = global_position
-	last_segment_end = global_position.move_toward(aim, speed * delta)
-	var contact := field.fire_query.segment(get_world_3d(), last_segment_start, last_segment_end)
+	last_segment_end = global_position.move_toward(aim, speed * step)
+	var travel_time := last_segment_start.distance_to(last_segment_end) / speed
+	var contact := field.fire_query.sweep_sphere(get_world_3d(), last_segment_start, last_segment_end, collision_radius)
 	if not contact.available:
 		return
 	if contact.blocked:
-		global_position = contact.position
-		_finish(Outcome.WORLD)
+		age = minf(lifetime, age + travel_time * contact.travel_fraction)
+		global_position = contact.center_position
+		_finish(Outcome.WORLD, contact.position)
 		return
 	global_position = last_segment_end
-	# The segment ends at the aim point without overshoot or a proximity shortcut.
-	# World contact, including an endpoint numerical tie, is resolved first.
+	# Resolve contacts along the usable interval before expiration at its endpoint.
+	# Sphere/world numerical ties win over the unchanged point target-hit model.
 	if global_position == aim:
+		age = minf(lifetime, age + travel_time)
 		_finish(Outcome.TARGET)
+		return
+	age = minf(lifetime, age + step)
+	if delta >= remaining:
+		age = lifetime
+		_finish(Outcome.EXPIRED)
 
 
-func _finish(terminal: Outcome) -> void:
+func _finish(terminal: Outcome, world_contact: Vector3 = Vector3.ZERO) -> void:
 	if spent:
 		return
 	spent = true # Resolve once, before damage callbacks can reenter.
 	outcome = terminal
-	contact_position = global_position
+	contact_position = world_contact if terminal == Outcome.WORLD else global_position
 	set_physics_process(false)
 	hide()
 	queue_free()

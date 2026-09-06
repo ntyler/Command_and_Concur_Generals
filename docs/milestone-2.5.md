@@ -1,5 +1,9 @@
 # Milestone 2.5 — line of fire and projectile–obstacle interaction
 
+**Historical point-collision report, qualified by Milestone 2.5.1.** Source inspection of `9111f90` confirmed that a normal rocket used a ray segment plus tiny endpoint probes, not a swept nonzero-radius sphere. Its successful tests below remain valid historical results, but did not prove compliance with the spherical projectile requirement. The earlier blanket acceptance statement is therefore qualified.
+
+Current implementation: [Milestone 2.5.1](milestone-2.5.1.md) adds a configurable 0.1-unit SphereShape3D, explicit initial/launch overlap checks, cast_motion flight sweeps, a separate 0.0001-unit query margin and lifetime-clipped final-tick travel. Hitscan remains line-based. Flying geometry and F3 launch feedback show the configured radius. The remainder of this document records the prior implementation and measurements; current acceptance, distinguishing regressions and justified expiry-fixture migration are in the corrective report.
+
 Implemented and validated on 2026-09-06 using **Godot 4.7.2.stable.official.ed1daf0bf**, Windows, PowerShell 7 and the existing Compatibility renderer/physics backend. No engine change, navigation redesign, automatic firing-position search, commit or tag was made. This report supersedes earlier range-only weapon behavior; historical results remain in the earlier reports.
 
 ## Preflight and preserved behavior
@@ -220,7 +224,7 @@ Source inspection finds no added per-frame scene-tree search or pairwise unit lo
 
 ## Acceptance and limitations
 
-**Verdict: Milestone 2.5 acceptance is supported within the specified scope.**
+**Historical verdict: the point-based checks passed, but this was insufficient for the required spherical collision contract. See Milestone 2.5.1 for corrected acceptance.** PASS values below describe the historical assertions, not spherical coverage.
 
 | # | Requirement | Status |
 | --- | --- | --- |
