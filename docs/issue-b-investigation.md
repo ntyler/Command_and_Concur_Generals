@@ -1,5 +1,7 @@
 # Issue B — targeted investigation after the Issue A repair
 
+> **Priority update — 2026-09-07:** the [current roadmap decision](roadmap.md) supersedes this report's blanket prohibition on subsequent feature work. Issue B and other open movement issues are deferred known limitations with engineering status unresolved. Historical evidence and acceptance results below remain intact; no historical execution budget is reopened and no further movement investigation is scheduled automatically.
+
 **Issue B: UNRESOLVED; Milestone 5: STILL BLOCKED.** The original log and source constraints establish that the final settled arrangement placed unit 4 beside a parked peer and would obstruct a direct retry. They do not establish that this arrangement existed before unit 4 failed. The historical reason for exhausting eight recovery attempts remains unknown. No production repair, acceptance waiver or new feature is proposed. The validated Issue A repair and its regressions remain byte-for-byte unchanged.
 
 ## Evidence and preservation

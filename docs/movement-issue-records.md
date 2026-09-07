@@ -1,5 +1,20 @@
 # Movement issues tracked during M5.0.1
 
+## Current scheduling status — 2026-09-07
+
+**DEFERRED KNOWN LIMITATIONS / ENGINEERING STATUS UNRESOLVED.** The user has explicitly removed these issues as automatic blockers to starting the next feature milestone. The [current roadmap decision](roadmap.md) supersedes earlier blanket blocking instructions, including historical status statements below. Full movement acceptance and full Milestone 5 regression acceptance have not passed. No repair, test assertion, failure, reproduction or diagnostic evidence is removed by this decision.
+
+| Outstanding issue | Evidence and engineering status | Scheduling status |
+| --- | --- | --- |
+| Original Issue B: M5 unit 4 cluster arrival failure | Original full-sequence arrival/settling failures and unknown historical cause remain in the Issue B record below and [investigation](issue-b-investigation.md). UNRESOLVED. | Deferred; not an automatic next-feature blocker |
+| Historical unit 41 boundary stall | Captured failure remains valid; later passing observations did not reproduce or resolve it. See [bounded attempt](issue-b-unit41-repair.md) and [continuous observation](issue-b-unit41-continuous-observation.md). UNRESOLVED. | Deferred; not an automatic next-feature blocker |
+| Current-build unit 23 graphical gate failure | On repaired gate source: 39 checks / 3 failures, eight exhausted recovery attempts. A later observation and final matrix passed, without establishing the failure mechanism. See [gate repair report](milestone-5-gate-repair.md). UNRESOLVED; not attributed to older source. | Deferred; not an automatic next-feature blocker |
+| Other recorded historical stalls and unproven causal links, including unit 13 recovery behavior | Retain [unit 13 comparison](issue-b-unit13-comparison.md), full-sequence evidence and earlier failed runs. Separate validated fixes do not establish resolution of these historical cases. | Deferred; no inferred closure or automatic investigation |
+
+**Validated repairs remain in the baseline:** Issue A's parked-neighbor clearance/recovery correction, the [projection step-size repair](issue-b-projection-repair.md), the [current boundary/neighbor escape repair](milestone-5-current-movement-repair.md) and the reproduced numerical [gate-corner repair](milestone-5-gate-repair.md). Keep their existing regressions and assertions intact. The latest recorded final integration matrix passed 4,740 assertions across 36 executions, but the separately recorded unit-23 failure remains unresolved; this is historical evidence, not a fresh validation run.
+
+Continue relevant feature and regression testing, reporting all failures and uncertain attribution honestly. Do not restart movement investigation, historical replay, recorder expansion or repair unless the user requests it or evidence demonstrates a direct dependency of required next-milestone behavior. The older narrative below is retained as historical evidence; its blocking language does not reinstate the superseded scheduling gate.
+
 ## A — captured baseline parked-neighbor deadlock (FIXED)
 
 Observed in `m501-pair7-baseline-cluster_50.json/.log` on authentic M4 source (`facf285`), using the shared 50-unit pre-cluster checkpoint from pair 2 current. Intended/accepted identities 1–50, group generation 4. Units 6 and 12 retained version 2, destinations `(33,0,20.5)` and `(30,0,17.5)`, and exhausted eight recoveries. Unit 12 was nearly stationary despite nonzero requested velocity; unit 6 repeated a detour and returned to congestion. Neighbors 1/26 parked 1.134655 apart. Moving/parked avoidance radii require 1.16 combined passage width. Recorded settled displacement was zero. Original JSON, events, log, screenshot, source/hash provenance and existing observer are preserved.

@@ -1,5 +1,7 @@
 # Milestone 5 — player-placed barracks and timed construction
 
+> **Priority update — 2026-09-07:** the [current roadmap decision](roadmap.md) defers outstanding movement issues and authorizes starting the next feature milestone. Engineering issues remain unresolved and full movement/M5 regression acceptance has not passed. Blocking statements below describe historical acceptance status; they no longer prohibit feature development. Historical results and evidence are retained.
+
 **M5.0.1 status: ACCEPTANCE STILL BLOCKED.** The [diagnosis and targeted repair](milestone-5.0.1.md) fixes the separately captured baseline parked-neighbor deadlock. Three-unit and full captured-arrangement regressions fail before and pass after; the post-repair matrix passes 4,224 assertions and the five graphical/matching headless stress pairs pass. The original M5 unit 4 failure lacks the historical telemetry needed to connect its mechanism and remains unresolved. Cancellation-cleanup failure fixtures still pass 46 assertions in each display mode. The historical failed matrix below remains unchanged; passing post-repair runs do not erase it or close the original failure.
 
 ## Scope and controls

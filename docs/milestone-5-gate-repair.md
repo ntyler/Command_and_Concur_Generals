@@ -1,5 +1,7 @@
 # Milestone 5 — current gate repair
 
+> **Priority update — 2026-09-07:** the [current roadmap decision](roadmap.md) makes the unresolved movement issues deferred known limitations, not automatic blockers to starting the next feature milestone. The report below preserves its original failures, repair evidence and acceptance status. Its proposed next movement observation is deferred; no investigation or replay is authorized by this update. Full movement acceptance has not passed.
+
 The reproduced numerical gate-corner stall is repaired. The original full movement sequence now passes in both headless and graphical modes, and all36 selected integration executions pass. **Overall movement reliability and Milestone5 acceptance remain blocked:** one earlier graphical avoidance run on this same repair failed for unit23. Its movement mechanism was not captured, and subsequent passing runs do not resolve it.
 
 This is the separately authorized gate task, following the current boundary/neighbor repair. It does not reopen historical budgets or claim historical unit41/original IssueB resolution. The task began at2026-09-07 20:52:11 UTC with a90-minute limit and20-minute validation reserve. The [predetermined plan](../validation-output/m5-gate-repair/plan.md) retains the initial execution limits and the later single observation of the newly encountered23 failure. No production changes preceded the qualifying baseline.
