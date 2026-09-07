@@ -1,5 +1,7 @@
 # Milestone 5 — player-placed barracks and timed construction
 
+**M5.0.1 status: ACCEPTANCE STILL BLOCKED.** The [diagnosis and targeted repair](milestone-5.0.1.md) fixes the separately captured baseline parked-neighbor deadlock. Three-unit and full captured-arrangement regressions fail before and pass after; the post-repair matrix passes 4,224 assertions and the five graphical/matching headless stress pairs pass. The original M5 unit 4 failure lacks the historical telemetry needed to connect its mechanism and remains unresolved. Cancellation-cleanup failure fixtures still pass 46 assertions in each display mode. The historical failed matrix below remains unchanged; passing post-repair runs do not erase it or close the original failure.
+
 ## Scope and controls
 
 This adds `res://scenes/construction_test.tscn` to Milestone 4 at `facf285`. The F5 main scene and all earlier alternate scenes remain unchanged. The construction scene retains one owned headquarters, two collectors, two finite caches, three friendly Rifles, three distant hostile Rifles using existing retaliation, static obstacles and the original fixed camera. It removes the preplaced barracks only in this scene.
@@ -247,7 +249,7 @@ foreach ($case in @(@('construction','construction_checks'),@('harvesting','harv
 | 3. Exactly-once construction spending/refunds | PASS |
 | 4. Timed activation of existing production | PASS |
 | 5. Actual navigation changes and unit traversal | PASS |
-| 6. Cancellation restores navigation without stale generations | PASS |
+| 6. Cancellation restores navigation without stale generations | PASS for successful cleanup; failed restoration keeps navigation blocked until reload, with the refund already committed (M5.0.1) |
 | 7. Existing moving units and collectors handle topology updates | NOT VERIFIED for full regression acceptance — controlled construction fixtures pass; graphical cluster failure remains unclassified |
 | 8. Existing production, safe spawning and rally reuse | PASS |
 | 9. Hitscan/spherical projectile world blocking | PASS |

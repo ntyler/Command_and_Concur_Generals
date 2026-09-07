@@ -87,6 +87,7 @@ var debug_label: Label3D
 var _progress_elapsed: float = 0.0
 var _progress_remaining: float = INF
 var _recovery_elapsed: float = 0.0
+var _recovery_waypoints: int = 0
 var _submitted_order: int = -1
 var _last_movement_frame: int = -1
 var _debug_elapsed: float = 0.0
@@ -206,6 +207,7 @@ func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
 	recovery_active = false
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
+	_recovery_waypoints = 0
 	stalled_for = 0.0
 	command_elapsed = 0.0
 	last_recovery_time = -INF
@@ -320,10 +322,13 @@ func _physics_process(delta: float) -> void:
 		return
 	if recovery_active:
 		_recovery_elapsed += delta
-		if global_position.distance_to(recovery_target) <= recovery_waypoint_tolerance or _recovery_elapsed >= recovery_duration:
+		if _recovery_elapsed >= recovery_duration:
 			_clear_recovery()
-			if not moving or order_version != processing_order:
-				return
+		elif global_position.distance_to(recovery_target) <= recovery_waypoint_tolerance:
+			if not _continue_recovery():
+				_clear_recovery()
+		if not moving or order_version != processing_order:
+			return
 	next_waypoint = agent.get_next_path_position()
 	# A finished path alone is not proof of arrival at the assigned final slot.
 	var direction := next_waypoint - global_position
@@ -378,6 +383,7 @@ func resume_navigation() -> void:
 		recovery_active = false
 		recovery_target = Vector3.ZERO
 		_recovery_elapsed = 0.0
+		_recovery_waypoints = 0
 		agent.avoidance_priority = 0.5
 	agent.target_position = recovery_target if recovery_active else assigned_destination
 	next_waypoint = global_position
@@ -411,6 +417,7 @@ func _finish_move(final_state: MovementState = MovementState.ARRIVED) -> void:
 	recovery_active = false
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
+	_recovery_waypoints = 0
 	_progress_elapsed = 0.0
 	stalled_for = 0.0
 	agent.velocity = Vector3.ZERO
@@ -469,7 +476,17 @@ func _recover() -> void:
 	last_recovery_time = command_elapsed
 	recovery_active = true
 	_recovery_elapsed = 0.0
+	_recovery_waypoints = 1
 	agent.avoidance_priority = recovery_priority
+	recovery_target = _choose_recovery_waypoint(_parked_recovery_neighbors())
+	agent.target_position = recovery_target
+	next_waypoint = global_position
+	_set_state(MovementState.RECOVERING)
+	if order_version != recovering_order:
+		return # A synchronous replacement owns all state from this point onward.
+
+
+func _choose_recovery_waypoint(neighbors: Array[Dictionary]) -> Vector3:
 	var map := agent.get_navigation_map()
 	var forward := (assigned_destination - global_position).normalized()
 	var best := global_position
@@ -496,23 +513,72 @@ func _recover() -> void:
 			length += path[segment - 1].distance_to(path[segment])
 		if length > recovery_radius * recovery_path_factor:
 			continue
+		if not _recovery_path_clear(path, neighbors):
+			continue
 		var score := candidate.distance_to(assigned_destination) + length * 0.2
 		if score < best_score:
 			best_score = score
 			best = candidate
 	# If no detour fits, a rate-limited repath/priority adjustment is still useful.
-	recovery_target = assigned_destination if best == global_position else best
-	agent.target_position = recovery_target
+	return assigned_destination if best == global_position else best
+
+
+func _parked_recovery_neighbors() -> Array[Dictionary]:
+	if not crowd_enabled:
+		return []
+	# Local, bounded physics broad-phase query only at recovery/continuation.
+	# Never a scene-tree scan, persistent neighbor registry or per-frame search.
+	var shape := SphereShape3D.new()
+	shape.radius = recovery_radius + neighbor_distance
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform.origin = global_position + Vector3.UP * 0.6
+	query.collision_mask = 2
+	query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(query, 64)
+
+
+func _recovery_path_clear(path: PackedVector3Array, neighbors: Array[Dictionary]) -> bool:
+	for hit in neighbors:
+		var other = hit["collider"]
+		if not is_instance_valid(other) or not other is RTSUnit or other.moving or not other.agent.avoidance_enabled:
+			continue
+		if (agent.avoidance_mask & other.agent.avoidance_layers) == 0:
+			continue
+		# Character bodies do not collide with peers, but RVO needs both radii.
+		# Permit escape from existing contact; reject a segment that moves deeper.
+		var clearance: float = minf(agent.radius + other.agent.radius, global_position.distance_to(other.global_position)) - 0.001
+		for index in range(1, path.size()):
+			var closest := Geometry3D.get_closest_point_to_segment(other.global_position, path[index - 1], path[index])
+			if closest.distance_to(other.global_position) < clearance:
+				return false
+	return true
+
+
+func _continue_recovery() -> bool:
+	# An escape waypoint alone can lead straight back into the same parked row.
+	# Allow one more local leg, within this attempt's original duration/budget.
+	if _recovery_waypoints >= 2 or recovery_target == assigned_destination or not crowd_enabled:
+		return false
+	var neighbors := _parked_recovery_neighbors()
+	var path := NavigationServer3D.map_get_path(agent.get_navigation_map(), global_position, assigned_destination, true)
+	if _recovery_path_clear(path, neighbors):
+		return false
+	var candidate := _choose_recovery_waypoint(neighbors)
+	if candidate == assigned_destination:
+		return false
+	_recovery_waypoints += 1
+	recovery_target = candidate
+	agent.target_position = candidate
 	next_waypoint = global_position
-	_set_state(MovementState.RECOVERING)
-	if order_version != recovering_order:
-		return # A synchronous replacement owns all state from this point onward.
+	return true
 
 
 func _clear_recovery() -> void:
 	recovery_active = false
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
+	_recovery_waypoints = 0
 	agent.target_position = assigned_destination
 	agent.avoidance_priority = 0.5
 	next_waypoint = global_position
