@@ -88,6 +88,7 @@ var _progress_elapsed: float = 0.0
 var _progress_remaining: float = INF
 var _recovery_elapsed: float = 0.0
 var _recovery_waypoints: int = 0
+var _recovery_escape := PackedVector3Array()
 var _submitted_order: int = -1
 var _last_movement_frame: int = -1
 var _debug_elapsed: float = 0.0
@@ -208,6 +209,7 @@ func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
 	_recovery_waypoints = 0
+	_recovery_escape.clear()
 	stalled_for = 0.0
 	command_elapsed = 0.0
 	last_recovery_time = -INF
@@ -384,6 +386,7 @@ func resume_navigation() -> void:
 		recovery_target = Vector3.ZERO
 		_recovery_elapsed = 0.0
 		_recovery_waypoints = 0
+		_recovery_escape.clear()
 		agent.avoidance_priority = 0.5
 	agent.target_position = recovery_target if recovery_active else assigned_destination
 	next_waypoint = global_position
@@ -401,6 +404,21 @@ func _move_on_navigation(desired_velocity: Vector3, delta: float) -> void:
 	# Keep every step on the clearance mesh, including turns at polygon corners.
 	var proposed := global_position + desired_velocity * delta
 	var navigable := NavigationServer3D.map_get_closest_point(agent.get_navigation_map(), proposed)
+	# Projection across a clearance corner can exceed the supplied callback step.
+	# Follow only the first navigable leg: a single slide must not cut a bend.
+	var step_distance := desired_velocity.length() * delta
+	if navigable != proposed and global_position.distance_to(navigable) > step_distance:
+		var path := NavigationServer3D.map_get_path(agent.get_navigation_map(), global_position, navigable, true)
+		navigable = global_position
+		if not path.is_empty():
+			for index in range(1, path.size()):
+				if global_position.distance_squared_to(path[index]) > 0.000000000001:
+					var candidate := global_position.move_toward(path[index], step_distance)
+					# Native path starts can drift along an exact mesh boundary. A
+					# shared convex cell proves the entire bounded leg is walkable.
+					if path[0].distance_to(global_position) <= 0.00001 or _navigation_cell_contains_segment(global_position, candidate):
+						navigable = candidate
+					break
 	velocity = (navigable - global_position) / delta
 	velocity.y = 0.0
 	move_and_slide()
@@ -408,6 +426,38 @@ func _move_on_navigation(desired_velocity: Vector3, delta: float) -> void:
 	global_position.y = 0.0
 	if velocity.length_squared() > 0.05:
 		_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(-velocity.x, -velocity.z), 0.25)
+
+
+func _navigation_cell_contains_segment(start: Vector3, end: Vector3) -> bool:
+	if navigation_suspended or not is_instance_valid(gameplay_field):
+		return false
+	var region := gameplay_field.navigation_region
+	if not is_instance_valid(region) or not region.enabled or region.get_navigation_map() != agent.get_navigation_map() or (region.navigation_layers & agent.navigation_layers) == 0:
+		return false
+	var mesh := region.navigation_mesh
+	if mesh == null:
+		return false
+	var local_start := region.to_local(start)
+	var local_end := region.to_local(end)
+	var vertices := mesh.get_vertices()
+	# TestField and its construction rebuilds produce flat rectangular cells.
+	# Verify that shape here; closed bounds retain legal edges without enlarging
+	# clearance or accepting a chord between separate cells across a hole.
+	for index in mesh.get_polygon_count():
+		var polygon := mesh.get_polygon(index)
+		if polygon.size() != 4:
+			continue
+		var a := vertices[polygon[0]]
+		var b := vertices[polygon[1]]
+		var c := vertices[polygon[2]]
+		var d := vertices[polygon[3]]
+		if a.y != b.y or a.y != c.y or a.y != d.y or local_start.y != a.y or local_end.y != a.y:
+			continue
+		if a.x >= c.x or a.z >= c.z or b != Vector3(c.x, a.y, a.z) or d != Vector3(a.x, a.y, c.z):
+			continue
+		if local_start.x >= a.x and local_start.x <= c.x and local_start.z >= a.z and local_start.z <= c.z and local_end.x >= a.x and local_end.x <= c.x and local_end.z >= a.z and local_end.z <= c.z:
+			return true
+	return false
 
 
 func _finish_move(final_state: MovementState = MovementState.ARRIVED) -> void:
@@ -418,6 +468,7 @@ func _finish_move(final_state: MovementState = MovementState.ARRIVED) -> void:
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
 	_recovery_waypoints = 0
+	_recovery_escape.clear()
 	_progress_elapsed = 0.0
 	stalled_for = 0.0
 	agent.velocity = Vector3.ZERO
@@ -443,7 +494,9 @@ func _update_progress(delta: float) -> void:
 		_progress_remaining = remaining
 		stalled_for = 0.0
 		if recovery_active:
-			_clear_recovery()
+			# Geometric goal progress can occur before a parked barrier is cleared.
+			if _recovery_escape.is_empty() or is_finite(_escape_leg_length(global_position, assigned_destination, _parked_recovery_neighbors())):
+				_clear_recovery()
 		else:
 			_set_state(MovementState.TRAVELLING)
 		return
@@ -478,12 +531,93 @@ func _recover() -> void:
 	_recovery_elapsed = 0.0
 	_recovery_waypoints = 1
 	agent.avoidance_priority = recovery_priority
-	recovery_target = _choose_recovery_waypoint(_parked_recovery_neighbors())
+	var neighbors := _parked_recovery_neighbors()
+	_recovery_escape = _plan_parked_escape(neighbors)
+	recovery_target = _choose_recovery_waypoint(neighbors) if _recovery_escape.is_empty() else _recovery_escape[0]
 	agent.target_position = recovery_target
 	next_waypoint = global_position
 	_set_state(MovementState.RECOVERING)
 	if order_version != recovering_order:
 		return # A synchronous replacement owns all state from this point onward.
+
+
+func _plan_parked_escape(neighbors: Array[Dictionary]) -> PackedVector3Array:
+	# A ring scored only by goal distance can repeatedly reverse along a fence.
+	# Test four corners and four wider approaches to the local parked bounds.
+	# A complete route must fit the same two-waypoint, remaining-time budget.
+	if is_finite(_escape_leg_length(global_position, assigned_destination, neighbors)):
+		return PackedVector3Array()
+	var bounds := Rect2()
+	var found := false
+	for hit in neighbors:
+		var other = hit.get("collider")
+		if not is_instance_valid(other) or not other is RTSUnit or other.moving or not other.agent.avoidance_enabled:
+			continue
+		if (agent.avoidance_mask & other.agent.avoidance_layers) == 0:
+			continue
+		# Account for the existing early waypoint handoff, without changing radii.
+		var clearance: float = agent.radius + other.agent.radius + recovery_waypoint_tolerance
+		var position_2d := Vector2(other.global_position.x, other.global_position.z)
+		var occupied := Rect2(position_2d - Vector2.ONE * clearance, Vector2.ONE * clearance * 2.0)
+		bounds = bounds.merge(occupied) if found else occupied
+		found = true
+	if not found:
+		return PackedVector3Array()
+	var candidates := PackedVector3Array()
+	var starts: Array[float] = []
+	var finishes: Array[float] = []
+	var map := agent.get_navigation_map()
+	var corners: Array[Vector2] = [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)]
+	# At existing contact, a tight far corner can initially move deeper into the
+	# first peer. Also allow a retreat perpendicular to the fence's longer axis.
+	for corner in corners.duplicate():
+		var wider: Vector2 = corner
+		if bounds.size.y >= bounds.size.x:
+			wider.x += -recovery_radius if corner.x < bounds.get_center().x else recovery_radius
+		else:
+			wider.y += -recovery_radius if corner.y < bounds.get_center().y else recovery_radius
+		corners.append(wider)
+	for point in corners:
+		var proposed := Vector3(point.x, 0.0, point.y)
+		var candidate := NavigationServer3D.map_get_closest_point(map, proposed)
+		if candidate.distance_to(proposed) > recovery_projection_slack or global_position.distance_to(candidate) > recovery_radius + neighbor_distance:
+			continue
+		if global_position.distance_to(candidate) <= recovery_waypoint_tolerance:
+			continue
+		_occupancy_query.transform.origin = candidate + Vector3.UP * 0.6
+		if not get_world_3d().direct_space_state.intersect_shape(_occupancy_query, 1).is_empty():
+			continue
+		candidates.append(candidate)
+		starts.append(_escape_leg_length(global_position, candidate, neighbors))
+		finishes.append(_escape_leg_length(candidate, assigned_destination, neighbors))
+	var available := movement_speed * maxf(0.0, recovery_duration - _recovery_elapsed)
+	var best := PackedVector3Array()
+	var best_length := INF
+	for first in candidates.size():
+		if starts[first] <= available and starts[first] + finishes[first] < best_length:
+			best_length = starts[first] + finishes[first]
+			best = PackedVector3Array([candidates[first]])
+		for second in candidates.size():
+			if first == second or not is_finite(starts[first]) or not is_finite(finishes[second]):
+				continue
+			var escape_length := starts[first] + _escape_leg_length(candidates[first], candidates[second], neighbors)
+			if escape_length <= available and escape_length + finishes[second] < best_length:
+				best_length = escape_length + finishes[second]
+				best = PackedVector3Array([candidates[first], candidates[second]])
+	return best if best_length <= movement_speed * maxf(0.0, command_timeout - command_elapsed) else PackedVector3Array()
+
+
+func _escape_leg_length(start: Vector3, end: Vector3, neighbors: Array[Dictionary]) -> float:
+	var path := NavigationServer3D.map_get_path(agent.get_navigation_map(), start, end, true)
+	if path.is_empty() or path[0].distance_to(start) > 0.00001 or path[-1].distance_to(end) > 0.00001 or not _recovery_path_clear(path, neighbors):
+		return INF
+	var length := 0.0
+	for index in range(1, path.size()):
+		var ray := PhysicsRayQueryParameters3D.create(path[index - 1] + Vector3.UP * 0.6, path[index] + Vector3.UP * 0.6, 2 | 4, [get_rid()])
+		if not get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+			return INF
+		length += path[index - 1].distance_to(path[index])
+	return length
 
 
 func _choose_recovery_waypoint(neighbors: Array[Dictionary]) -> Vector3:
@@ -561,6 +695,20 @@ func _continue_recovery() -> bool:
 	if _recovery_waypoints >= 2 or recovery_target == assigned_destination or not crowd_enabled:
 		return false
 	var neighbors := _parked_recovery_neighbors()
+	if not _recovery_escape.is_empty():
+		if _recovery_escape.size() < 2:
+			return false
+		var next := _recovery_escape[1]
+		_occupancy_query.transform.origin = next + Vector3.UP * 0.6
+		if not get_world_3d().direct_space_state.intersect_shape(_occupancy_query, 1).is_empty():
+			return false
+		if _escape_leg_length(global_position, next, neighbors) > movement_speed * maxf(0.0, recovery_duration - _recovery_elapsed) or not is_finite(_escape_leg_length(next, assigned_destination, neighbors)):
+			return false
+		_recovery_escape.remove_at(0)
+		_recovery_waypoints += 1
+		recovery_target = next
+		agent.target_position = next
+		return true
 	var path := NavigationServer3D.map_get_path(agent.get_navigation_map(), global_position, assigned_destination, true)
 	if _recovery_path_clear(path, neighbors):
 		return false
@@ -575,6 +723,7 @@ func _continue_recovery() -> bool:
 
 
 func _clear_recovery() -> void:
+	_recovery_escape.clear()
 	recovery_active = false
 	recovery_target = Vector3.ZERO
 	_recovery_elapsed = 0.0
