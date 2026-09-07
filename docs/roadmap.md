@@ -16,7 +16,7 @@ This decision supersedes earlier instructions in milestone/investigation reports
 
 ## Implemented sequence and next feature
 
-The repository documents milestones through Milestone 5 and its corrective work. It defines no subsequent feature milestone. Milestone 6 below is a new recommendation, not a recovered prior commitment.
+At the priority decision, the repository documented milestones through Milestone 5 and its corrective work, with no subsequent feature defined. Milestone 6 was then recommended and explicitly authorized for implementation; its current behavior and evidence are in [the Milestone 6 report](milestone-6.md).
 
 | Milestone | Feature / status |
 | --- | --- |
@@ -25,11 +25,11 @@ The repository documents milestones through Milestone 5 and its corrective work.
 | 3 | Fixed HQ/barracks, shared credits, Rifle queues and rally points |
 | 4 | Finite supply harvesting, collector cargo and automatic deposits |
 | 5 | Player-placed barracks, paid timed construction, cancellation and serialized navigation updates; feature implemented, full regression acceptance not passed |
-| **6 — recommended next** | **Playable base assault: damageable HQs/completed barracks, an integrated economy-to-combat scenario, victory/defeat and restart** |
+| **6 — implemented** | **Playable base assault: damageable HQs/completed barracks, an integrated economy-to-combat scenario, victory/defeat/draw and restart. See the separate feature validation report.** |
 
 Milestone 6 gives construction, harvesting, production and combat a shared match objective. It uses a small flat map and existing units, resources and commands. Strategic AI, additional economic systems and general movement reliability work remain outside this milestone.
 
-The focused handoff is [Milestone 6 implementation prompt](milestone-6-prompt.md). Its status is **PROPOSED / NOT IMPLEMENTED**; this priority update changes documentation only.
+The scope remains [Milestone 6 implementation prompt](milestone-6-prompt.md). Implementation and validation are reported in [Milestone 6](milestone-6.md); deferred movement acceptance remains separate. No Milestone 7 work is started or defined by this handoff.
 
 ## Baseline and validation provenance
 

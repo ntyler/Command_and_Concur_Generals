@@ -85,7 +85,7 @@ func _build_obstacle(index: int, rectangle: Rect2) -> void:
 
 
 func contains_building(building: RTSBuilding) -> bool:
-	if _closing or not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(building) or not building.is_inside_tree() or not _buildings.has(building.get_instance_id()):
+	if _closing or not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(building) or not building.is_inside_tree() or not building.is_alive() or not _buildings.has(building.get_instance_id()):
 		return false
 	var ancestor: Node = building
 	while ancestor != null and ancestor != self:
@@ -96,8 +96,9 @@ func contains_building(building: RTSBuilding) -> bool:
 
 
 func register_building(building: RTSBuilding) -> void:
-	if _closing or not is_instance_valid(building) or not is_ancestor_of(building) or building.is_queued_for_deletion():
+	if _closing or not is_instance_valid(building) or not is_ancestor_of(building) or building.is_queued_for_deletion() or not building.is_alive():
 		return
+	building.gameplay_field = self
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
 	if building.kind == RTSBuilding.Kind.BARRACKS and not _producers.has(id):
@@ -124,6 +125,24 @@ func _reconcile_departure(id: int) -> void:
 	_buildings.erase(id)
 	var producer := _producers.get(id) as UnitProduction
 	_producers.erase(id)
+	if producer != null:
+		producer.close(true)
+	if is_instance_valid(self) and is_instance_valid(selection):
+		selection.prune_building()
+
+
+func _retire_building(identity: int) -> UnitProduction:
+	# Silent membership commit, shared by destruction and normal departure.
+	_buildings.erase(identity)
+	var producer := _producers.get(identity) as UnitProduction
+	_producers.erase(identity)
+	return producer
+
+
+func destroy_building(building: RTSBuilding) -> void:
+	if not is_instance_valid(building) or not building.destroyed or not _buildings.has(building.get_instance_id()):
+		return
+	var producer := _retire_building(building.get_instance_id())
 	if producer != null:
 		producer.close(true)
 	if is_instance_valid(self) and is_instance_valid(selection):

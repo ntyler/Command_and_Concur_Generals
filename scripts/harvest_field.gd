@@ -76,7 +76,7 @@ func _live_descendant(node: Node) -> bool:
 
 
 func harvest_member(unit: CollectorTruck) -> bool:
-	return is_instance_valid(unit) and contains_unit(unit) and _live_descendant(unit)
+	return gameplay_enabled and is_instance_valid(unit) and contains_unit(unit) and _live_descendant(unit)
 
 
 func contains_cache(cache: SupplyCache) -> bool:

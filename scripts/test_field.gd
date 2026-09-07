@@ -22,6 +22,7 @@ const STRESS_OBSTACLES: Array[Rect2] = [
 var field_bounds: Rect2 = MAP_BOUNDS
 var obstacles: Array[Rect2] = OBSTACLES.duplicate()
 
+var gameplay_enabled: bool = true # Scene-local match gate; legacy fields stay enabled.
 var units: Array[RTSUnit] = []
 var _registered: Dictionary[int, RTSUnit] = {}
 var camera_rig: RTSCamera
@@ -148,6 +149,8 @@ func _new_batch() -> CommandBatchResult:
 
 
 func _batch_selection(result: CommandBatchResult) -> Array[RTSUnit]:
+	if not gameplay_enabled:
+		return []
 	# Selection pruning can synchronously accept a newer command. Capture its
 	# authority before querying; rejected nested requests do not steal authority.
 	var authority := _command_version
@@ -166,7 +169,7 @@ func _finish_batch(result: CommandBatchResult, description: String) -> CommandBa
 	return result
 
 
-func issue_attack(target: RTSUnit) -> CommandBatchResult:
+func issue_attack(target: Variant) -> CommandBatchResult:
 	var result := _new_batch()
 	var selected := _batch_selection(result)
 	if result.superseded or selected.is_empty():

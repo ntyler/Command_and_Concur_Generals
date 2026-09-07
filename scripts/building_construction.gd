@@ -22,7 +22,7 @@ func _init(owner: ConstructionField) -> void:
 
 func field() -> ConstructionField:
 	var value := _field_ref.get_ref() as ConstructionField
-	return value if not closed and is_instance_valid(value) and value.is_inside_tree() and not value._closing and not value.is_queued_for_deletion() else null
+	return value if not closed and is_instance_valid(value) and value.is_inside_tree() and value.gameplay_enabled and not value._closing and not value.is_queued_for_deletion() else null
 
 
 func can_begin(requester: int, headquarters: Variant, definition: ConstructionDefinition) -> String:

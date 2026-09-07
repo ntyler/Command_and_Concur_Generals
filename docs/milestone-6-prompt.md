@@ -1,6 +1,6 @@
 # Milestone 6 implementation prompt — playable base assault
 
-Recommended feature milestone; not implemented. The [current roadmap decision](roadmap.md) governs this work.
+Feature specification. The [current roadmap decision](roadmap.md) governs this work; implementation status and actual validation are recorded separately in [the Milestone 6 report](milestone-6.md).
 
 ---
 

@@ -165,6 +165,23 @@ func _outline(rectangle: Rect2, color: Color) -> void:
 	add_child(visual)
 
 
+func destroy_building(building: RTSBuilding) -> void:
+	if not is_instance_valid(building) or not building.destroyed or not _buildings.has(building.get_instance_id()):
+		return
+	var producer := _retire_building(building.get_instance_id())
+	# Erase the authoritative footprint before navigation suspension can notify anyone.
+	if building is ConstructionBuilding:
+		construction.sites.erase(building.site.site_id)
+	else:
+		var rectangle := Rect2(Vector2(building.global_position.x, building.global_position.z) - building.footprint / 2.0, building.footprint)
+		static_footprints.erase(rectangle)
+	construction._request_navigation()
+	if producer != null:
+		producer.close(true)
+	if is_instance_valid(self) and is_instance_valid(selection):
+		selection.prune_building()
+
+
 func _exit_tree() -> void:
 	if construction != null:
 		construction.close()

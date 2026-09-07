@@ -21,7 +21,7 @@ var _source: WeakRef
 var _field: WeakRef
 
 
-func configure(field: TestField, source: RTSUnit, target: RTSUnit, definition: WeaponDefinition) -> void:
+func configure(field: TestField, source: RTSUnit, target: Node3D, definition: WeaponDefinition) -> void:
 	_field = weakref(field)
 	_source = weakref(source)
 	_target = weakref(target)
@@ -47,7 +47,11 @@ func _ready() -> void:
 
 
 func target_unit() -> RTSUnit:
-	return _target.get_ref() as RTSUnit if _target != null else null
+	return target_actor() as RTSUnit
+
+
+func target_actor() -> Node3D:
+	return _target.get_ref() as Node3D if _target != null else null
 
 
 func _physics_process(delta: float) -> void:
@@ -55,7 +59,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var remaining := lifetime - age
 	var field := _field.get_ref() as TestField
-	var target := target_unit()
+	var target := target_actor()
 	if remaining <= 0.0:
 		_finish(Outcome.EXPIRED)
 		return
@@ -69,7 +73,7 @@ func _physics_process(delta: float) -> void:
 	last_segment_start = global_position
 	last_segment_end = global_position.move_toward(aim, speed * step)
 	var travel_time := last_segment_start.distance_to(last_segment_end) / speed
-	var contact := field.fire_query.sweep_sphere(get_world_3d(), last_segment_start, last_segment_end, collision_radius)
+	var contact := field.fire_query.sweep_sphere(get_world_3d(), last_segment_start, last_segment_end, collision_radius, LineOfFire.target_exclusions(target))
 	if not contact.available:
 		return
 	if contact.blocked:
@@ -105,7 +109,7 @@ func _finish(terminal: Outcome, world_contact: Vector3 = Vector3.ZERO) -> void:
 		if is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion():
 			CombatFeedback.world_impact(field, contact_position)
 	elif terminal == Outcome.TARGET:
-		applied = TeamRules.damage_target(_field.get_ref() as TestField, source_team, target_unit(), damage, _source.get_ref() as RTSUnit)
+		applied = TeamRules.damage_target(_field.get_ref() as TestField, source_team, target_actor(), damage, _source.get_ref() as RTSUnit)
 	if not is_instance_valid(self):
 		return
 	resolved.emit(applied)

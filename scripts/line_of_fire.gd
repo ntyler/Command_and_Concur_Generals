@@ -47,15 +47,23 @@ func _init() -> void:
 	_sphere_query.collide_with_areas = false
 
 
+static func target_exclusions(target: Node3D) -> Array[RID]:
+	# Only the intended building is excluded. Every intervening blocker remains solid.
+	var exclusions: Array[RID] = []
+	if target is RTSBuilding:
+		exclusions.append(target.get_rid())
+	return exclusions
+
+
 static func muzzle(unit: RTSUnit) -> Vector3:
 	return unit.global_position + Vector3.UP * MUZZLE_HEIGHT
 
 
-static func aim(unit: RTSUnit) -> Vector3:
+static func aim(unit: Node3D) -> Vector3:
 	return unit.global_position + Vector3.UP * AIM_HEIGHT
 
 
-func weapon_clearance(source: RTSUnit, target: RTSUnit, definition: WeaponDefinition) -> Trace:
+func weapon_clearance(source: RTSUnit, target: Node3D, definition: WeaponDefinition) -> Trace:
 	var line := firing_line(source, target)
 	if not line.is_clear() or definition.mode != WeaponDefinition.Mode.GUIDED_PROJECTILE:
 		return line
@@ -65,7 +73,7 @@ func weapon_clearance(source: RTSUnit, target: RTSUnit, definition: WeaponDefini
 	return line if launch.is_clear() else launch
 
 
-func firing_line(source: RTSUnit, target: RTSUnit) -> Trace:
+func firing_line(source: RTSUnit, target: Node3D) -> Trace:
 	clearance_queries += 1
 	var world := source.get_world_3d()
 	# The centerline muzzle stays within the body footprint. Also validate the
@@ -73,10 +81,10 @@ func firing_line(source: RTSUnit, target: RTSUnit) -> Trace:
 	var attachment := segment(world, source.global_position + Vector3.UP * BODY_HEIGHT, muzzle(source))
 	if not attachment.is_clear():
 		return attachment
-	return segment(world, muzzle(source), aim(target))
+	return segment(world, muzzle(source), aim(target), target_exclusions(target))
 
 
-func segment(world: World3D, from: Vector3, to: Vector3) -> Trace:
+func segment(world: World3D, from: Vector3, to: Vector3, exclusions: Array[RID] = []) -> Trace:
 	var result := Trace.new()
 	result.from_position = from
 	result.to_position = to
@@ -84,6 +92,8 @@ func segment(world: World3D, from: Vector3, to: Vector3) -> Trace:
 	# Commands/input may run outside physics. Unavailable is never clear.
 	if not Engine.is_in_physics_frame() or world == null:
 		return result
+	_ray.exclude = exclusions
+	_point.exclude = exclusions
 	segment_queries += 1
 	result.available = true
 	var space := world.direct_space_state
@@ -117,7 +127,7 @@ func segment(world: World3D, from: Vector3, to: Vector3) -> Trace:
 	return result
 
 
-func sweep_sphere(world: World3D, from: Vector3, to: Vector3, radius: float) -> Trace:
+func sweep_sphere(world: World3D, from: Vector3, to: Vector3, radius: float, exclusions: Array[RID] = []) -> Trace:
 	var result := Trace.new()
 	result.from_position = from
 	result.to_position = to
@@ -125,6 +135,7 @@ func sweep_sphere(world: World3D, from: Vector3, to: Vector3, radius: float) -> 
 	result.center_position = to
 	if not Engine.is_in_physics_frame() or world == null or not is_finite(radius) or radius <= 0.0:
 		return result
+	_sphere_query.exclude = exclusions
 	sphere_queries += 1
 	result.available = true
 	if _sphere.radius != radius:

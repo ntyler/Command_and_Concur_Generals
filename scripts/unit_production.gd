@@ -41,7 +41,7 @@ func building() -> RTSBuilding:
 func is_available() -> bool:
 	var field := _field_ref.get_ref() as ProductionField
 	var producer := building()
-	return not _closed and is_instance_valid(field) and is_instance_valid(producer) and producer.operational and field.contains_building(producer) and producer.production == self
+	return not _closed and is_instance_valid(field) and field.gameplay_enabled and is_instance_valid(producer) and producer.operational and field.contains_building(producer) and producer.production == self
 
 
 func jobs() -> Array[Dictionary]:

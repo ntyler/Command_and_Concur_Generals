@@ -1,6 +1,6 @@
 class_name RTSBuilding
 extends StaticBody3D
-## Fixed primitive footprint; deliberately has no health or combat controller.
+## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
 enum Kind { HEADQUARTERS, BARRACKS }
 @export var owner_id: int = 1
@@ -12,7 +12,19 @@ enum Kind { HEADQUARTERS, BARRACKS }
 @export var spawn_retry_interval: float = 0.25
 
 var production: UnitProduction
-var operational: bool = true
+signal availability_changed
+var gameplay_field: ProductionField
+var health: UnitHealth
+var health_label: Label3D
+var _identity_label: Label3D
+var destroyed: bool = false
+var _departing: bool = false
+var operational: bool = true:
+	set(value):
+		operational = value
+		if is_instance_valid(health):
+			health.damage_enabled = value and not destroyed and is_instance_valid(gameplay_field) and gameplay_field.gameplay_enabled
+			_refresh_health()
 var selection_indicator: MeshInstance3D
 var rally_indicator: MeshInstance3D
 
@@ -39,6 +51,7 @@ func _ready() -> void:
 	# Painted door and trim stay inside the solid's footprint.
 	_mesh(Vector3(0.02, 1.4, 1.5), Vector3(footprint.x / 2.0 + 0.005, 0.7, 0), Color("263c49"))
 	var label := Label3D.new()
+	_identity_label = label
 	label.text = "%s · %d" % [display_name(), owner_id]
 	label.position.y = building_height + 0.6
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -73,6 +86,68 @@ func set_selected(selected: bool) -> void:
 		rally_indicator.visible = selected and production != null and production.has_rally
 		if rally_indicator.visible:
 			rally_indicator.global_position = production.rally_point + Vector3.UP * 0.1
+
+
+func enable_damage(maximum: float) -> void:
+	if health != null or destroyed:
+		return
+	health = UnitHealth.new()
+	health.maximum = maximum
+	health.damage_enabled = operational
+	add_child(health)
+	health.damaged.connect(_on_damage)
+	health.died.connect(_on_died)
+	health_label = Label3D.new()
+	health_label.position.y = building_height + 1.0
+	health_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	health_label.font_size = 38
+	health_label.pixel_size = 0.025
+	add_child(health_label)
+	_refresh_health()
+
+
+func is_alive() -> bool:
+	return not destroyed and not _departing and (health == null or health.is_alive())
+
+
+func can_take_damage() -> bool:
+	return operational and health != null and health.damage_enabled and is_alive()
+
+
+func _refresh_health() -> void:
+	if is_instance_valid(health_label):
+		_identity_label.visible = not operational and is_alive()
+		health_label.visible = operational and is_alive()
+		health_label.text = "%s · %d\n%d / %d HP" % [display_name(), owner_id, ceili(health.current), ceili(health.maximum)]
+		health_label.modulate = Color("86ffcb") if owner_id == 1 else Color("ffa18c")
+
+
+func _on_damage(_amount: float, _source: Node) -> void:
+	_refresh_health()
+
+
+func _on_died(_source: Node) -> void:
+	if destroyed:
+		return
+	destroyed = true
+	operational = false
+	collision_layer = 0
+	set_physics_process(false)
+	hide()
+	queue_free() # All subsequent commands already reject this body.
+	if is_instance_valid(gameplay_field):
+		gameplay_field.destroy_building(self)
+	if is_instance_valid(self):
+		availability_changed.emit()
+
+
+func _enter_tree() -> void:
+	_departing = false
+
+
+func _exit_tree() -> void:
+	_departing = true
+	availability_changed.emit()
 
 
 func exit_position() -> Vector3:

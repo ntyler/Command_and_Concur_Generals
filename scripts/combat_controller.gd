@@ -57,15 +57,19 @@ func _ready() -> void:
 
 
 func target_unit() -> RTSUnit:
-	return _target.get_ref() as RTSUnit if _target != null else null
+	return target_actor() as RTSUnit # Preserve the existing unit-only accessor.
 
 
-func issue_attack(target: RTSUnit, explicit_player_order: bool = true) -> bool:
+func target_actor() -> Node3D:
+	return _target.get_ref() as Node3D if _target != null else null
+
+
+func issue_attack(target: Variant, explicit_player_order: bool = true) -> bool:
 	if not TeamRules.can_attack(unit.gameplay_field, unit, target) or not weapon.definition.is_valid():
 		return false
 	var version := prepare_order(PlayerCommand.ATTACK if explicit_player_order else PlayerCommand.NONE)
 	_target = weakref(target)
-	target.availability_changed.connect(_on_target_availability_changed)
+	target.connect("availability_changed", _on_target_availability_changed)
 	state = State.FACING if unit.global_position.distance_to(target.global_position) <= weapon.definition.attack_range else State.PURSUING
 	_pursuit_wait = pursuit_interval
 	unit.halt_motion()
@@ -78,9 +82,9 @@ func issue_attack(target: RTSUnit, explicit_player_order: bool = true) -> bool:
 func prepare_order(command: PlayerCommand) -> int:
 	# Stage a coherent order before movement emits its own synchronous signals.
 	order_version += 1
-	var old_target := target_unit()
-	if is_instance_valid(old_target) and old_target.availability_changed.is_connected(_on_target_availability_changed):
-		old_target.availability_changed.disconnect(_on_target_availability_changed)
+	var old_target := target_actor()
+	if is_instance_valid(old_target) and old_target.is_connected("availability_changed", _on_target_availability_changed):
+		old_target.disconnect("availability_changed", _on_target_availability_changed)
 	_target = null
 	player_command = command
 	state = State.NONE
@@ -136,7 +140,7 @@ func _physics_process(delta: float) -> void:
 		state = State.NONE
 		publish_state(order_version)
 		return
-	var target := target_unit()
+	var target := target_actor()
 	if not TeamRules.can_attack(unit.gameplay_field, unit, target):
 		_end_order("target_unavailable")
 		return
@@ -213,7 +217,7 @@ func _hold_blocked(version: int) -> void:
 	publish_state(version) # All state is coherent; write nothing after listeners.
 
 
-func _update_pursuit(target: RTSUnit, version: int) -> void:
+func _update_pursuit(target: Node3D, version: int) -> void:
 	var map := unit.agent.get_navigation_map()
 	if NavigationServer3D.map_get_iteration_id(map) == 0:
 		return
@@ -238,7 +242,7 @@ func _update_pursuit(target: RTSUnit, version: int) -> void:
 
 
 func _on_target_availability_changed() -> void:
-	if not TeamRules.can_attack(unit.gameplay_field, unit, target_unit()):
+	if not TeamRules.can_attack(unit.gameplay_field, unit, target_actor()):
 		_end_order("target_unavailable")
 
 
@@ -249,12 +253,12 @@ func _on_own_availability_changed() -> void:
 		var version := prepare_order(PlayerCommand.NONE)
 		unit.halt_motion()
 		publish_state(version)
-	elif target_unit() != null:
+	elif target_actor() != null:
 		_on_target_availability_changed()
 
 
 func _on_damaged(_amount: float, source: Node) -> void:
-	if retaliation_enabled and player_command == PlayerCommand.NONE and target_unit() == null and TeamRules.can_attack(unit.gameplay_field, unit, source as RTSUnit):
+	if retaliation_enabled and player_command == PlayerCommand.NONE and target_actor() == null and TeamRules.can_attack(unit.gameplay_field, unit, source as RTSUnit):
 		issue_attack(source as RTSUnit, false)
 
 

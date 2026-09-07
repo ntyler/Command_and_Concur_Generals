@@ -1,6 +1,6 @@
 # Fieldwork — RTS prototype
 
-**Current priority (2026-09-07): forward feature development is authorized.** Outstanding movement failures are **deferred known limitations, still unresolved**, and no longer automatically block starting the next feature milestone. Full movement/Milestone 5 regression acceptance has not passed. The [current roadmap](docs/roadmap.md) supersedes earlier blanket milestone-blocking instructions while preserving repairs, tests and historical evidence. No subsequent feature was previously defined; the recommended next step is [Milestone 6: playable base assault](docs/milestone-6-prompt.md), currently proposed, not implemented.
+**Current priority (2026-09-07): forward feature development is authorized.** Outstanding movement failures are **deferred known limitations, still unresolved**, and do not automatically block feature development. Full movement/Milestone 5 regression acceptance has not passed. The [current roadmap](docs/roadmap.md) supersedes earlier blanket milestone-blocking instructions while preserving repairs, tests and historical evidence. [Milestone 6: playable base assault](docs/milestone-6.md) now adds an integrated match; its feature validation is reported separately from movement acceptance.
 
 An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production. Milestone 4 adds finite supplies, two preplaced unarmed Collector Trucks, automatic deposits and harvesting-funded production. Milestone 5 adds player-placed barracks, paid timed construction, cancellation and serialized runtime navigation changes in a separate construction scene.
 
@@ -51,6 +51,16 @@ Current construction checks pass **267 headless / 270 graphical assertions**. Th
 
 [Milestone 5.0.1 diagnosis and repair](docs/milestone-5.0.1.md) fixes the separately captured baseline parked-neighbor deadlock using clearance-aware local recovery and at most two waypoints within the existing attempt deadline. The three-unit reproduction fails before and passes after; a reconstruction with both captured movers and all 48 parked neighbors also fails before and passes after in both display modes. The post-repair matrix passes **4,224 assertions**, with five graphical stress repeats and five matching headless runs also passing. The original M5 unit 4 failure remains causally unresolved, so full acceptance stays **blocked**. [Issue records](docs/movement-issue-records.md) distinguish the two cases. Cleanup-failure checks remain intact and pass **46 headless / 46 graphical assertions**.
 
+To play **base assault**, open `scenes/base_assault.tscn` and press **F6**, or run:
+
+```powershell
+& $godot --path . res://scenes/base_assault.tscn
+```
+
+Destroy the coral HQ while protecting the mint HQ. Each has **1200 HP**. Start with **1000 credits**, three Rifles, two collectors, two finite supply caches and no barracks. The owned HQ starts selected: **Build Barracks** costs **400**, completes after **10 simulated seconds** plus navigation preparation, and provides the existing **100-credit / 5-second** Rifle queue and rally controls. A completed barracks has **450 HP**; unfinished sites keep their existing cancellation rules. Select collectors and right-click supplies to earn more credits, then select combat units and right-click hostile units or buildings to attack. Other buildings and terrain still obstruct fire. The enemy's three Rifles receive one HQ assault order after **90 simulated seconds**; there is no enemy economy or strategic AI.
+
+Enemy-HQ destruction is victory; player-HQ destruction is defeat; both lost in one physics tick is a draw. The result stops gameplay and shows **Restart**, which reloads the initial match. Building destruction gives no construction refund; only paid undeployed production jobs refund, once. The earlier scenes retain their defaults and invulnerable buildings. See [Milestone 6](docs/milestone-6.md) for lifecycle details, complete validation and limits.
+
 ## Controls
 
 | Input | Behavior |
@@ -65,6 +75,8 @@ Current construction checks pass **267 headless / 270 graphical assertions**. Th
 | Shift + drag | Add enclosed units without clearing others |
 | Right click ground | Replace selected units' move orders with distinct destinations |
 | Right click a living hostile unit | Attack with selected combat units; friendly clicks issue no attack |
+| Right click a hostile HQ or completed barracks (base assault) | Attack the building with selected combat units |
+| Restart on the base-assault result | Load a fresh initial match after victory, defeat or draw |
 | X | Stop selected units' movement, combat and harvesting; retain loaded cargo; S remains camera pan |
 | Escape | Cancel the current selection gesture or barracks placement |
 | F3 | Toggle movement debugging and combat firing lines |
@@ -147,6 +159,8 @@ Attempted travel is clipped to both target aim and remaining lifetime. An alread
 | `tests/construction_checks.gd` | Viewport, accounting, topology, lifecycle, failure and earned construction/combat checks |
 | `tests/parked_deadlock_checks.gd`, `tests/parked_deadlock_controls.gd` | Captured parked-neighbor reproduction, reachability controls, bounded failure and recovery interruption |
 | `tests/captured_parked_cluster_checks.gd`, `tests/fixtures/parked_cluster_capture.json` | Both captured movers with all 48 stationary neighbors, original goals and recorded source provenance |
+| `scripts/base_assault_field.gd`, `scenes/base_assault.tscn` | Integrated bases/economy, opt-in building health, one scripted assault and end-of-physics result/restart |
+| `tests/base_assault_checks.gd` | Building weapons/input, destruction/refunds, actual defeat, same-tick draws and earned-credit victory/restart |
 
 The field partitions a flat `NavigationMesh` at obstacle edges expanded by 0.85 units, producing connected convex polygons with holes. Geometry and navigation use the same obstacle definitions. Agents advance along navigation paths in physics ticks; step lengths are bounded to prevent overshoot and positions stay on the clearance mesh. `CharacterBody3D` collisions provide an additional solid obstacle boundary.
 
@@ -217,6 +231,6 @@ See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/m
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
 - Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
-- The production scene remains a starting-credit and fixed-base queue demonstration; harvesting and construction have separate scenes. No builders, building destruction/capture/sale, power, technology, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
+- Production, harvesting and construction demonstrations remain available separately; base assault integrates them and adds damage/destruction for HQs and completed barracks. No builders, building repair/capture/sale, power, technology, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or multiplayer are implemented. All visuals are original generated primitives.
 
 Physical-input construction/harvesting/production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to flat geometry, normal simulation timing and a small local exit search; harvesting has eight local access slots per target and can fail safely under permanent obstruction. Neither physics lockstep determinism nor universal frame-rate behavior is claimed.

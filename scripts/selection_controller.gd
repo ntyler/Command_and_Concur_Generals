@@ -3,7 +3,7 @@ extends Node
 
 signal selection_changed(count: int)
 signal move_requested(destination: Vector3)
-signal attack_requested(target: RTSUnit)
+signal attack_requested(target: Node3D)
 signal stop_requested
 signal harvest_requested(cache: SupplyCache)
 signal deposit_requested(headquarters: RTSBuilding)
@@ -116,7 +116,11 @@ func _physics_process(_delta: float) -> void:
 				elif hit["collider"] is SupplyCache:
 					harvest_requested.emit(hit["collider"] as SupplyCache)
 				elif hit["collider"] is RTSBuilding:
-					deposit_requested.emit(hit["collider"] as RTSBuilding)
+					var building := hit["collider"] as RTSBuilding
+					if TeamRules.is_hostile_target(gameplay_field, friendly_owner_id, building):
+						attack_requested.emit(building)
+					else:
+						deposit_requested.emit(building)
 				elif (hit["collider"] as CollisionObject3D).collision_layer & 1:
 					move_requested.emit(hit["position"])
 	_pending_picks.clear()

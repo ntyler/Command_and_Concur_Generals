@@ -2,7 +2,7 @@ class_name WeaponEmitter
 extends Node
 ## Cooldown and damage/launch authority. Visuals never apply damage.
 
-signal fired(target: RTSUnit, projectile: GuidedProjectile)
+signal fired(target: Node3D, projectile: GuidedProjectile)
 
 var unit: RTSUnit
 var definition: WeaponDefinition
@@ -15,7 +15,7 @@ func advance(delta: float) -> void:
 	cooldown_remaining = maxf(0.0, cooldown_remaining - delta)
 
 
-func try_fire(target: RTSUnit) -> bool:
+func try_fire(target: Variant) -> bool:
 	last_fire_line = null
 	if not Engine.is_in_physics_frame():
 		return false # Direct firing is supported only during a physics step.
