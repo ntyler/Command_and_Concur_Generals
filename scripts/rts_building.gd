@@ -12,6 +12,7 @@ enum Kind { HEADQUARTERS, BARRACKS }
 @export var spawn_retry_interval: float = 0.25
 
 var production: UnitProduction
+var operational: bool = true
 var selection_indicator: MeshInstance3D
 var rally_indicator: MeshInstance3D
 

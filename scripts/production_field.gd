@@ -30,9 +30,10 @@ func _ready() -> void:
 	_spawn_query.margin = 0.001
 	obstacles = BASE_OBSTACLES.duplicate()
 	super._ready()
-	barracks.production.has_rally = true
-	barracks.production.rally_point = Vector3(-8, 0, 3)
-	production_panel = ProductionPanel.new()
+	if is_instance_valid(barracks):
+		barracks.production.has_rally = true
+		barracks.production.rally_point = Vector3(-8, 0, 3)
+	production_panel = create_production_panel()
 	production_panel.field = self
 	get_node("ControlsFeedback").add_child(production_panel)
 	var controls := info_panel.get_child(0).get_child(1) as Label
@@ -45,6 +46,10 @@ func _on_selection_changed(count: int) -> void:
 	if not is_instance_valid(status_label):
 		return
 	status_label.text = "%02d units selected  /  Alpha: mint  /  Bravo: coral" % count
+
+
+func create_production_panel() -> ProductionPanel:
+	return ProductionPanel.new()
 
 
 func _unit_count() -> int:

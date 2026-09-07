@@ -22,6 +22,7 @@ var _pressed: bool = false
 var _dragging: bool = false
 var _additive: bool = false
 var _pending_picks: Array[Dictionary] = []
+var placement_active: bool = false
 
 
 func _ready() -> void:
@@ -58,7 +59,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pending_picks.append({"kind": "stop"})
 		get_viewport().set_input_as_handled()
 		return
-	if camera_rig.pointer_over_interface():
+	if placement_active or camera_rig.pointer_over_interface():
 		return
 	if event.is_action_pressed("select_units"):
 		_pressed = true

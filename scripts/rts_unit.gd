@@ -92,6 +92,9 @@ var _last_movement_frame: int = -1
 var _debug_elapsed: float = 0.0
 var _occupancy_query: PhysicsShapeQueryParameters3D
 var _visual: Node3D
+var navigation_suspended: bool = false
+var _navigation_order: int = -1
+var _navigation_progress: float = 0.0
 
 
 func _ready() -> void:
@@ -288,6 +291,12 @@ func facing_error(point: Vector3) -> float:
 
 
 func _physics_process(delta: float) -> void:
+	if navigation_suspended:
+		if moving:
+			command_elapsed += delta
+			if command_elapsed >= command_timeout:
+				_fail_move()
+		return
 	if NavigationServer3D.map_get_iteration_id(agent.get_navigation_map()) == 0:
 		return
 	if not moving:
@@ -331,8 +340,50 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_avoidance_velocity(safe_velocity: Vector3) -> void:
-	if crowd_enabled and agent.avoidance_enabled and moving and _submitted_order == order_version:
+	if not navigation_suspended and crowd_enabled and agent.avoidance_enabled and moving and _submitted_order == order_version:
 		_move_on_navigation(safe_velocity.limit_length(movement_speed), get_physics_process_delta_time())
+
+
+func suspend_navigation() -> void:
+	if navigation_suspended:
+		return
+	navigation_suspended = true
+	_navigation_order = order_version
+	var remaining := _remaining_path_length() if moving else 0.0
+	_navigation_progress = _progress_remaining - remaining if is_finite(_progress_remaining) and is_finite(remaining) else 0.0
+	_submitted_order = -1
+	velocity = Vector3.ZERO
+	agent.velocity = Vector3.ZERO
+	agent.set_velocity_forced(Vector3.ZERO)
+
+
+func resume_navigation() -> void:
+	if not navigation_suspended:
+		return
+	navigation_suspended = false
+	if not moving:
+		return
+	var map := agent.get_navigation_map()
+	var path := NavigationServer3D.map_get_path(map, global_position, assigned_destination, true)
+	# Never project a now-invalid destination to a different player location.
+	if path.is_empty() or path[-1].distance_to(assigned_destination) > 0.02 or NavigationServer3D.map_get_closest_point(map, global_position).distance_to(global_position) > 0.02:
+		_fail_move()
+		return
+	var remaining := 0.0
+	for i in range(1, path.size()):
+		remaining += path[i - 1].distance_to(path[i])
+	_progress_remaining = remaining + (_navigation_progress if order_version == _navigation_order else 0.0)
+	var discard_detour := recovery_active and NavigationServer3D.map_get_closest_point(map, recovery_target).distance_to(recovery_target) > 0.02
+	if discard_detour:
+		recovery_active = false
+		recovery_target = Vector3.ZERO
+		_recovery_elapsed = 0.0
+		agent.avoidance_priority = 0.5
+	agent.target_position = recovery_target if recovery_active else assigned_destination
+	next_waypoint = global_position
+	# No new order version, deadline, stall history or attempt-budget reset.
+	if discard_detour:
+		_set_state(MovementState.TRAVELLING)
 
 
 func _move_on_navigation(desired_velocity: Vector3, delta: float) -> void:

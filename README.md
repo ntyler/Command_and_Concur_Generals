@@ -1,6 +1,6 @@
 # Fieldwork — RTS prototype
 
-An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production. Milestone 4 adds finite supplies, two preplaced unarmed Collector Trucks, automatic deposits and harvesting-funded production.
+An original 3D RTS prototype built with **Godot 4.7.2**, typed GDScript, primitive meshes, and built-in navigation. The validated controls and crowd-movement fields remain available. Combat includes health, hitscan rifles, guided rockets, pursuit and limited retaliation. Milestone 2.5.1 supplies spherical projectile/world collision; Milestone 3 adds fixed headquarters/barracks, starting credits and Rifle production. Milestone 4 adds finite supplies, two preplaced unarmed Collector Trucks, automatic deposits and harvesting-funded production. Milestone 5 adds player-placed barracks, paid timed construction, cancellation and serialized runtime navigation changes in a separate construction scene.
 
 Open `project.godot` in Godot and press **F6** with `scenes/test_field.tscn` open, or **F5** to run the configured main scene. There is no asset download, plugin installation, navigation bake, or build step. The field and its navigation mesh are generated together at scene startup.
 
@@ -41,6 +41,12 @@ To play harvesting, open `scenes/harvesting_test.tscn` and press **F6**, or run 
 
 Ground Move and **X Stop** cancel harvesting immediately while preserving cargo. Right-click an owned HQ with cargo to deposit once and idle. A new cache assignment preserves cargo; a full collector deposits before going to the new cache. Rejected commands preserve existing work. Mixed selections dispatch only to eligible collectors and report partial acceptance; combat units keep their orders. Death loses undeposited cargo. Missing HQ or blocked access retains cargo and requires a new command. Empty caches remain as static obstacles. Cargo/activity and the assigned cache's remaining amount appear only for selected collectors; the existing credit and production panel is reused. Collectors have 150 health, move at 4 units/s with the unchanged crowd/recovery settings, and cannot fire or be produced. See [Milestone 4](docs/milestone-4.md) for transfer, lifecycle, validation and pre-existing stress-test evidence.
 
+To play construction, open `scenes/construction_test.tscn` and press **F6**, or run `& $godot --path . res://scenes/construction_test.tscn`. This scene starts with the same HQ, collectors, supplies, credits and combat units, but **no barracks**. Select the HQ and press **Build Barracks**. The free translucent preview shows the actual footprint and a written placement reason. Left-click valid ground to spend **400 credits**; right-click or **Escape** cancels placement. UI clicks cannot place. Green outlines mark the construction boundary; gold outlines protect access. Positions near `(-12, 0, 3)` and `(-3, 0, 16)` provide room for two barracks when clear of units.
+
+One unfinished site is allowed. Its **10 simulated seconds** start only after the updated navigation map is synchronized and verified by queries. Select the site to inspect progress or **Cancel construction** for the original full cost. Cleanup holds the slot until the restored navigation is ready. Completed barracks use the existing Rifle queue and rally controls; completion cannot be sold or refunded. Existing movers briefly wait and replan with their original command history; newly invalid destinations fail safely. Harvesting continues with conserved cargo and credits. See [Milestone 5](docs/milestone-5.md) for exact placement/access rules, failure behavior, validation and separately reported intermittent stress results.
+
+Current construction checks pass **267 headless / 270 graphical assertions**. The latest complete matrix ran **3,936 assertions with two graphical 50-unit cluster failures**. Full crowd-regression acceptance remains **NOT VERIFIED**: baseline gate failures are established, but the new cluster failure's cause is unconfirmed. The report retains the failed matrix and every required repeat and diagnostic run; passing reruns are not presented as a fix.
+
 ## Controls
 
 | Input | Behavior |
@@ -56,7 +62,7 @@ Ground Move and **X Stop** cancel harvesting immediately while preserving cargo.
 | Right click ground | Replace selected units' move orders with distinct destinations |
 | Right click a living hostile unit | Attack with selected combat units; friendly clicks issue no attack |
 | X | Stop selected units' movement, combat and harvesting; retain loaded cargo; S remains camera pan |
-| Escape | Cancel the current selection gesture |
+| Escape | Cancel the current selection gesture or barracks placement |
 | F3 | Toggle movement debugging and combat firing lines |
 | T (line-of-fire scene only) | Move the marked rocket target into/out of the wall shadow |
 | Click or Shift-click an owned building (production scene) | Select that building alone and clear unit selection |
@@ -64,6 +70,10 @@ Ground Move and **X Stop** cancel harvesting immediately while preserving cargo.
 | Train / Cancel in barracks panel | Enqueue a paid Rifle / refund that undeployed job |
 | Right click supply with collectors selected (harvesting scene) | Begin or replace automatic harvesting |
 | Right click owned HQ with loaded collectors selected | Return and deposit once, then idle |
+| Build Barracks at owned HQ (construction scene) | Enter free placement mode |
+| Left click ground while placing | Request the validated 400-credit construction site |
+| Right click while placing | Cancel placement without issuing a unit order |
+| Cancel construction in selected-site panel | Refund the unfinished site's original payment and restore terrain |
 
 The controls panel consumes pointer input and suspends camera movement while hovered. X still stops selected units over this passive panel; a focused UI control that consumes X keeps the event. Releasing a drag over it cancels the gesture. Losing application focus or leaving the window also cancels a drag. Shift is sampled when a selection gesture begins. Shift-clicking empty ground preserves selection. Clicks on obstacles or beyond the ground issue no move order; ground points near the boundary are projected onto navigation.
 
@@ -125,6 +135,12 @@ Attempted travel is clipped to both target aim and remaining lifetime. An alread
 | `scripts/collector_truck.gd`, `scripts/collector_harvest.gd` | Primitive unarmed unit using the existing mover and separate timed cargo/order state |
 | `scripts/supply_cache.gd`, `scripts/harvest_transfer.gd` | Finite instance inventory and historical committed transfer values |
 | `scripts/harvest_panel.gd`, `tests/harvesting_checks.gd` | Contextual cargo UI and real-trip, callback, lifecycle, conservation and earned-production checks |
+| `scripts/construction_field.gd`, `scenes/construction_test.tscn` | Barracks-free starting scene, full-footprint validation and protected access geometry |
+| `scripts/building_construction.gd`, `scripts/construction_site.gd`, `scripts/construction_result.gd` | Stable paid sites, bounded lifecycle, captured refunds and historical acceptance |
+| `scripts/construction_navigation.gd` | Serialized rectangle meshes, map/region iteration checks and query readiness |
+| `scripts/construction_definition.gd`, `construction/barracks.tres` | Barracks cost/time/height configuration and fixed footprint |
+| `scripts/building_placement.gd`, `scripts/construction_panel.gd`, `scripts/construction_building.gd` | Free ghost input, contextual controls and ordinary producer presentation |
+| `tests/construction_checks.gd` | Viewport, accounting, topology, lifecycle, failure and earned construction/combat checks |
 
 The field partitions a flat `NavigationMesh` at obstacle edges expanded by 0.85 units, producing connected convex polygons with holes. Geometry and navigation use the same obstacle definitions. Agents advance along navigation paths in physics ticks; step lengths are bounded to prevent overshoot and positions stay on the clearance mesh. `CharacterBody3D` collisions provide an additional solid obstacle boundary.
 
@@ -167,6 +183,8 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/production_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/harvesting_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/harvesting_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/construction_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/construction_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
@@ -187,10 +205,10 @@ See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/m
 ## Scope and limits
 
 - Crowd avoidance reduces overlap but permits brief partial contact. It is not rigid vehicle collision. Tested units settle at distinct positions; difficult untested congestion can fail safely and accept a replacement order.
-- Navigation is for these flat, static fields. Slopes, dynamic navigation changes, opposing traffic through a gate, and crowds above 50 need separate validation.
+- Navigation supports these flat fields and serialized barracks placement/cancellation in the construction scene. Slopes, arbitrary moving geometry, frequent large-map rebuilding, opposing traffic through a gate, and crowds above 50 need separate validation.
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
 - Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
-- The production scene remains a starting-credit and fixed-base queue demonstration; harvesting is in its separate scene. No player construction, building destruction/capture/sale, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
+- The production scene remains a starting-credit and fixed-base queue demonstration; harvesting and construction have separate scenes. No builders, building destruction/capture/sale, power, technology, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or later systems are implemented. All visuals are original generated primitives.
 
-Physical-input harvesting/production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to fixed flat geometry, normal simulation timing and a small local exit search; harvesting has eight local access slots per target and can fail safely under permanent obstruction. Neither physics lockstep determinism nor universal frame-rate behavior is claimed.
+Physical-input construction/harvesting/production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to flat geometry, normal simulation timing and a small local exit search; harvesting has eight local access slots per target and can fail safely under permanent obstruction. Neither physics lockstep determinism nor universal frame-rate behavior is claimed.

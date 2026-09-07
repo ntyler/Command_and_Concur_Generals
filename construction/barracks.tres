@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ConstructionDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/construction_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+credit_cost = 400
+duration = 10.0
+footprint = Vector2(6, 5)
+height = 2.6

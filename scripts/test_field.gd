@@ -287,13 +287,20 @@ func _build_obstacle(index: int, rectangle: Rect2) -> void:
 
 
 func _build_navigation() -> void:
+	navigation_region = NavigationRegion3D.new()
+	navigation_region.name = "NavigationRegion3D"
+	navigation_region.navigation_mesh = create_navigation_mesh(obstacles)
+	add_child(navigation_region)
+
+
+func create_navigation_mesh(footprints: Array[Rect2]) -> NavigationMesh:
 	# Partition a flat mesh at every expanded obstacle edge. Shared vertices make
 	# connected convex polygons, with explicit holes and repeatable agent clearance.
 	var bounds := field_bounds.grow(-CLEARANCE)
 	var xs: Array[float] = [bounds.position.x, bounds.end.x]
 	var zs: Array[float] = [bounds.position.y, bounds.end.y]
 	var blocked: Array[Rect2] = []
-	for obstacle in obstacles:
+	for obstacle in footprints:
 		var expanded := obstacle.grow(CLEARANCE).intersection(bounds)
 		blocked.append(expanded)
 		for x in [expanded.position.x, expanded.end.x]:
@@ -321,10 +328,7 @@ func _build_navigation() -> void:
 			if walkable:
 				var a := z * xs.size() + x
 				mesh.add_polygon(PackedInt32Array([a, a + 1, a + xs.size() + 1, a + xs.size()]))
-	navigation_region = NavigationRegion3D.new()
-	navigation_region.name = "NavigationRegion3D"
-	navigation_region.navigation_mesh = mesh
-	add_child(navigation_region)
+	return mesh
 
 
 func _box(size: Vector3, offset: Vector3, color: Color, layer: int = 0) -> void:

@@ -126,6 +126,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if weapon != null:
 		weapon.advance(delta)
+	if unit.navigation_suspended:
+		return
 	if state == State.NONE:
 		if player_command == PlayerCommand.MOVE and not unit.moving:
 			player_command = PlayerCommand.NONE

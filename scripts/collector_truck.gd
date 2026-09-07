@@ -61,7 +61,7 @@ func harvest_move(point: Vector3) -> bool:
 func _physics_process(delta: float) -> void:
 	var work := harvesting
 	super._physics_process(delta)
-	if work != null:
+	if work != null and is_instance_valid(self) and (not navigation_suspended or movement_state == MovementState.FAILED):
 		work.advance(delta)
 
 
