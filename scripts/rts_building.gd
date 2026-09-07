@@ -2,7 +2,7 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS }
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY }
 @export var owner_id: int = 1
 @export var kind: Kind = Kind.BARRACKS
 @export var footprint: Vector2 = Vector2(6, 5)
@@ -34,7 +34,13 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.VEHICLE_FACTORY:
+		return "Vehicle Factory"
 	return "Headquarters" if kind == Kind.HEADQUARTERS else "Barracks"
+
+
+func supports_recipe(definition: ProductionDefinition) -> bool:
+	return definition != null and ((kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle"))
 
 
 func _ready() -> void:
@@ -50,6 +56,11 @@ func _ready() -> void:
 	_mesh(Vector3(footprint.x - 0.4, 0.12, footprint.y - 0.4), Vector3(0, building_height + 0.06, 0), Color("adc9ba"))
 	# Painted door and trim stay inside the solid's footprint.
 	_mesh(Vector3(0.02, 1.4, 1.5), Vector3(footprint.x / 2.0 + 0.005, 0.7, 0), Color("263c49"))
+	if kind == Kind.VEHICLE_FACTORY:
+		# Broad garage door and raised roof rails distinguish the factory at game zoom.
+		_mesh(Vector3(0.025, 2.0, 3.2), Vector3(footprint.x / 2.0 + 0.01, 1, 0), Color("263c49"))
+		for z in [-1.5, 1.5]:
+			_mesh(Vector3(footprint.x - 0.8, 0.35, 0.35), Vector3(0, building_height + 0.2, z), Color("e8b86c"))
 	var label := Label3D.new()
 	_identity_label = label
 	label.text = "%s · %d" % [display_name(), owner_id]

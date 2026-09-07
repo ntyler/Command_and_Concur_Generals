@@ -11,6 +11,7 @@ class Job extends RefCounted:
 	var payer: int
 	var paid: int
 	var scene: PackedScene
+	var body: CapsuleShape3D
 	var label: String
 	var duration: float
 	var elapsed: float = 0.0
@@ -66,7 +67,7 @@ func enqueue(requester: int, definition: ProductionDefinition) -> ProductionResu
 	var producer := building()
 	if requester != producer.owner_id:
 		return ProductionResult.reject("Producer not controlled")
-	if definition == null or definition != producer.recipe or not definition.is_valid():
+	if definition == null or definition != producer.recipe or not producer.supports_recipe(definition) or not definition.is_valid():
 		return ProductionResult.reject("Unsupported or invalid recipe")
 	if _jobs.size() >= producer.queue_capacity:
 		return ProductionResult.reject("Queue full")
@@ -77,6 +78,7 @@ func enqueue(requester: int, definition: ProductionDefinition) -> ProductionResu
 	job.paid = definition.credit_cost
 	job.duration = definition.training_duration
 	job.scene = definition.unit_scene
+	job.body = definition.deployment_body()
 	job.label = definition.display_name
 	if not _wallet.spend(requester, job.paid):
 		return ProductionResult.reject("Insufficient credits")
@@ -149,7 +151,7 @@ func _advance_head(delta: float) -> void:
 		return
 	job.retry_left = maxf(0.01, building().spawn_retry_interval)
 	var field := _field_ref.get_ref() as ProductionField
-	var candidate := field.find_spawn(building())
+	var candidate := field.find_spawn(building(), job.body)
 	if candidate.is_empty():
 		_set_message("Exit blocked")
 		return

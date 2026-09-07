@@ -6,7 +6,7 @@ var site_label: Label3D
 
 
 func display_name() -> String:
-	return "Barracks site %d" % site.site_id if site != null and not operational else "Barracks"
+	return "%s site %d" % [super.display_name(), site.site_id] if site != null and not operational else super.display_name()
 
 
 func _ready() -> void:
@@ -25,4 +25,9 @@ func refresh_construction() -> void:
 		if child is MeshInstance3D and child != selection_indicator and child != rally_indicator:
 			var material := child.material_override as StandardMaterial3D
 			if material != null:
-				material.albedo_color = Color("547c83") if operational else Color("b99557")
+				if not operational:
+					material.albedo_color = Color("b99557")
+				elif kind == Kind.VEHICLE_FACTORY:
+					material.albedo_color = Color("c9a468") if child.position.y > building_height else Color("687b9b")
+				else:
+					material.albedo_color = Color("547c83")

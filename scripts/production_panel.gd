@@ -89,6 +89,8 @@ func _refresh() -> void:
 		return
 	var recipe := building.recipe
 	train_button.text = "Train %s · %d credits · %s s" % [recipe.display_name, recipe.credit_cost, str(recipe.training_duration)] if recipe != null else "No recipe"
+	if recipe != null and building.kind == RTSBuilding.Kind.VEHICLE_FACTORY:
+		train_button.text = "Train %s\n%d credits · %s s" % [recipe.display_name, recipe.credit_cost, str(recipe.training_duration)]
 	train_button.disabled = not producer.is_available() or recipe == null or producer.count() >= building.queue_capacity or field.credits.balance(building.owner_id) < recipe.credit_cost
 	feedback.text = producer.message
 	if producer.count() >= building.queue_capacity:

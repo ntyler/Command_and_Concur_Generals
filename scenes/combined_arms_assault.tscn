@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/base_assault_field.gd" id="1"]
+[ext_resource type="Resource" path="res://construction/vehicle_factory.tres" id="2"]
+
+[node name="CombinedArmsAssault" type="Node3D"]
+script = ExtResource("1")
+vehicle_factory_definition = ExtResource("2")
+restart_scene = "res://scenes/combined_arms_assault.tscn"

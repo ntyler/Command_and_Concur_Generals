@@ -20,6 +20,7 @@ var _closing: bool = false
 var _spawn_query: PhysicsShapeQueryParameters3D
 var _claims_frame: int = -1
 var _spawn_claims := PackedVector3Array()
+var _spawn_claim_radii: Array[float] = []
 
 
 func _ready() -> void:
@@ -101,7 +102,7 @@ func register_building(building: RTSBuilding) -> void:
 	building.gameplay_field = self
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
-	if building.kind == RTSBuilding.Kind.BARRACKS and not _producers.has(id):
+	if building.kind in [RTSBuilding.Kind.BARRACKS, RTSBuilding.Kind.VEHICLE_FACTORY] and not _producers.has(id):
 		building.production = UnitProduction.new(self, building, credits)
 		_producers[id] = building.production
 	var exiting := _building_exiting.bind(id)
@@ -168,15 +169,21 @@ func valid_rally(origin: Vector3, point: Vector3) -> bool:
 	return not path.is_empty() and path[-1].distance_to(point) <= 0.02
 
 
-func find_spawn(building: RTSBuilding) -> PackedVector3Array:
+func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVector3Array:
 	if not Engine.is_in_physics_frame() or not contains_building(building):
 		return PackedVector3Array()
 	var exit_point := building.exit_position()
 	if not _nav_point(exit_point):
 		return PackedVector3Array()
+	if body == null:
+		if building.recipe == null or not building.recipe.is_valid():
+			return PackedVector3Array()
+		body = building.recipe.deployment_body()
+	_spawn_query.shape = body
 	if _claims_frame != Engine.get_physics_frames():
 		_claims_frame = Engine.get_physics_frames()
 		_spawn_claims.clear()
+		_spawn_claim_radii.clear()
 	for offset in SPAWN_OFFSETS:
 		var point := exit_point + offset
 		if not _nav_point(point):
@@ -189,18 +196,19 @@ func find_spawn(building: RTSBuilding) -> PackedVector3Array:
 			length += path[i - 1].distance_to(path[i])
 		if path.is_empty() or path[-1].distance_to(point) > 0.02 or length > exit_point.distance_to(point) + 0.02:
 			continue
-		_spawn_query.transform = Transform3D(Basis.IDENTITY, point + RTSUnit.BODY_CENTER)
+		_spawn_query.transform = Transform3D(Basis.IDENTITY, point + Vector3.UP * body.height / 2.0)
 		if not get_world_3d().direct_space_state.intersect_shape(_spawn_query, 1).is_empty():
 			continue
 		var claimed := false
-		for previous in _spawn_claims:
-			if previous.distance_to(point) < RTSUnit.BODY_RADIUS * 2.0 + 0.002:
+		for index in _spawn_claims.size():
+			if _spawn_claims[index].distance_to(point) < _spawn_claim_radii[index] + body.radius + 0.002:
 				claimed = true
 				break
 		if claimed:
 			continue
 		# Covers two producers deploying before newly added collision bodies sync.
 		_spawn_claims.append(point)
+		_spawn_claim_radii.append(body.radius)
 		return PackedVector3Array([point])
 	return PackedVector3Array()
 
@@ -215,7 +223,7 @@ func prepare_deployment(scene: PackedScene, owner_id: int, point: Vector3) -> RT
 	var unit := instance as RTSUnit
 	_next_unit += 1
 	unit.unit_id = _next_unit
-	unit.name = "ProducedRifle%03d" % unit.unit_id
+	unit.name = "Produced%s%03d" % ["RocketVehicle" if unit.combat_weapon == preload("res://weapons/rocket.tres") else "Rifle", unit.unit_id]
 	unit.owner_id = owner_id
 	unit.position = point
 	unit.hide()
@@ -243,3 +251,4 @@ func _exit_tree() -> void:
 	_producers.clear()
 	_buildings.clear()
 	_spawn_claims.clear()
+	_spawn_claim_radii.clear()

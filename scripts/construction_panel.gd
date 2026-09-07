@@ -2,6 +2,7 @@ class_name ConstructionPanel
 extends ProductionPanel
 
 var build_button: Button
+var factory_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -14,6 +15,10 @@ func _ready() -> void:
 	build_button.focus_mode = Control.FOCUS_NONE
 	column.add_child(build_button)
 	build_button.pressed.connect(_begin)
+	factory_button = Button.new()
+	factory_button.focus_mode = Control.FOCUS_NONE
+	column.add_child(factory_button)
+	factory_button.pressed.connect(_begin_factory)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_progress = ProgressBar.new()
@@ -40,6 +45,11 @@ func refresh_construction() -> void:
 	var building := field.selection.selected_building()
 	build_button.visible = building != null and building.kind == RTSBuilding.Kind.HEADQUARTERS
 	build_button.text = "Build Barracks · %d credits · %s s" % [world.construction_definition.credit_cost, str(world.construction_definition.duration)]
+	var factory := world.vehicle_factory_definition
+	factory_button.visible = build_button.visible and factory != null
+	if factory != null:
+		factory_button.text = "Build Vehicle Factory\n%d credits · %s s" % [factory.credit_cost, str(factory.duration)]
+		factory_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, building, factory).is_empty()
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, building, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
@@ -76,6 +86,12 @@ func _begin() -> void:
 	var world := field as ConstructionField
 	if is_instance_valid(world.placement):
 		world.placement.begin(field.selection.selected_building())
+
+
+func _begin_factory() -> void:
+	var world := field as ConstructionField
+	if world.vehicle_factory_definition != null and is_instance_valid(world.placement):
+		world.placement.begin(field.selection.selected_building(), world.vehicle_factory_definition)
 
 
 func _cancel_site() -> void:

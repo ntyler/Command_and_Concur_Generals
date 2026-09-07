@@ -26,10 +26,11 @@ At the priority decision, the repository documented milestones through Milestone
 | 4 | Finite supply harvesting, collector cargo and automatic deposits |
 | 5 | Player-placed barracks, paid timed construction, cancellation and serialized navigation updates; feature implemented, full regression acceptance not passed |
 | **6 — implemented** | **Playable base assault: damageable HQs/completed barracks, an integrated economy-to-combat scenario, victory/defeat/draw and restart. See the separate feature validation report.** |
+| **7 — implemented** | **Vehicle Factory and existing Rocket Vehicle production, through shared construction/queues, in a combined-arms assault variant. See [feature validation and limitations](milestone-7.md).** |
 
 Milestone 6 gives construction, harvesting, production and combat a shared match objective. It uses a small flat map and existing units, resources and commands. Strategic AI, additional economic systems and general movement reliability work remain outside this milestone.
 
-The scope remains [Milestone 6 implementation prompt](milestone-6-prompt.md). Implementation and validation are reported in [Milestone 6](milestone-6.md); deferred movement acceptance remains separate. No Milestone 7 work is started or defined by this handoff.
+Milestone 6's original scope and validation remain in its [implementation prompt](milestone-6-prompt.md) and [report](milestone-6.md). The user subsequently authorized Milestone 7: one factory, one recipe for the existing Rocket Vehicle, and a combined-arms scene reusing the base-assault lifecycle. [Milestone 7](milestone-7.md) records its implementation and validation separately from deferred movement acceptance. No Milestone 8 work is started or defined by this handoff.
 
 ## Baseline and validation provenance
 

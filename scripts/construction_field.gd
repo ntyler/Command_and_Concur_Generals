@@ -5,6 +5,7 @@ extends HarvestField
 const BUILD_AREA := Rect2(-27, -21, 54, 43)
 const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -13.3, 3, 9), Rect2(-27, 10, 25, 2)]
 @export var construction_definition: ConstructionDefinition = preload("res://construction/barracks.tres")
+@export var vehicle_factory_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
 var construction: BuildingConstruction
 var placement: BuildingPlacement
@@ -78,10 +79,14 @@ func valid_rally(origin: Vector3, point: Vector3) -> bool:
 	return (construction == null or not construction.navigation.blocked) and super.valid_rally(origin, point)
 
 
-func find_spawn(building: RTSBuilding) -> PackedVector3Array:
+func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVector3Array:
 	if construction.navigation.blocked:
 		return PackedVector3Array()
-	return super.find_spawn(building)
+	return super.find_spawn(building, body)
+
+
+func supports_construction(definition: ConstructionDefinition) -> bool:
+	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition)
 
 
 func protected_areas() -> Array[Rect2]:
@@ -123,13 +128,13 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 	for protected in protected_areas():
 		if clear.intersects(protected, true):
 			return "Protected deposit, supply, exit or access corridor"
-	# A new barracks must itself have a clear usable exit; later sites protect it.
+	# A new production building must have a clear usable exit; later sites protect it.
 	var exit_rectangle := exit_area(rectangle)
 	if not BUILD_AREA.encloses(exit_rectangle):
-		return "Barracks exit must fit inside the construction area"
+		return "%s exit must fit inside the construction area" % definition.display_name()
 	for occupied in obstacles:
 		if exit_rectangle.intersects(occupied.grow(CLEARANCE), true):
-			return "Barracks exit would be obstructed"
+			return "%s exit would be obstructed" % definition.display_name()
 	for sample: Vector2 in [clear.position, Vector2(clear.end.x, clear.position.y), clear.end, Vector2(clear.position.x, clear.end.y), clear.get_center()]:
 		_ground_query.from = Vector3(sample.x, 4, sample.y)
 		_ground_query.to = Vector3(sample.x, -1, sample.y)

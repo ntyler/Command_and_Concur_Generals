@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ProductionDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/production_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/rocket_vehicle.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+identifier = &"rocket_vehicle"
+display_name = "Rocket Vehicle"
+unit_scene = ExtResource("2")
+credit_cost = 250
+training_duration = 8.0

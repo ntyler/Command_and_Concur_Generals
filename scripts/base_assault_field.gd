@@ -8,6 +8,7 @@ const ENEMY_BASE := Rect2(16.5, -15, 7, 6)
 @export var headquarters_health: float = 1200.0
 @export var barracks_health: float = 450.0
 @export var assault_delay: float = 90.0
+@export_file("*.tscn") var restart_scene: String = "res://scenes/base_assault.tscn"
 var enemy_headquarters: RTSBuilding
 var result: Result = Result.RUNNING
 var elapsed: float = 0.0
@@ -62,6 +63,10 @@ func _ready() -> void:
 	resolver.name = "EndOfPhysicsResult"
 	add_child(resolver)
 	(info_panel.get_child(0).get_child(0) as Label).text = "FIELDWORK  /  BASE ASSAULT"
+	if vehicle_factory_definition != null:
+		(info_panel.get_child(0).get_child(0) as Label).text = "FIELDWORK  /  COMBINED ARMS"
+		var controls := info_panel.get_child(0).get_child(1) as Label
+		controls.text = controls.text.replace("Barracks + right click", "Producer + right click")
 	selection.select_building(headquarters)
 	_update_objective()
 
@@ -135,7 +140,7 @@ func restart_match() -> bool:
 	if result == Result.RUNNING or _restarting or not is_inside_tree() or is_queued_for_deletion():
 		return false
 	_restarting = true
-	return get_tree().change_scene_to_file("res://scenes/base_assault.tscn") == OK
+	return get_tree().change_scene_to_file(restart_scene) == OK
 
 
 func _update_objective() -> void:
@@ -143,6 +148,8 @@ func _update_objective() -> void:
 		return
 	var phase := "Enemy assault underway" if assault_issued else "Enemy assault in %ds" % ceili(maxf(0, assault_delay - elapsed))
 	objective_label.text = "DESTROY THE CORAL HQ · PROTECT YOUR HQ\nBuild barracks → harvest supplies → train Rifles → attack\n" + phase
+	if vehicle_factory_definition != null:
+		objective_label.text = "DESTROY THE CORAL HQ · PROTECT YOUR HQ\nHarvest → build barracks + factory → train Rifles + Rockets\n" + phase
 
 
 func _build_match_ui() -> void:

@@ -61,6 +61,16 @@ Destroy the coral HQ while protecting the mint HQ. Each has **1200 HP**. Start w
 
 Enemy-HQ destruction is victory; player-HQ destruction is defeat; both lost in one physics tick is a draw. The result stops gameplay and shows **Restart**, which reloads the initial match. Building destruction gives no construction refund; only paid undeployed production jobs refund, once. The earlier scenes retain their defaults and invulnerable buildings. See [Milestone 6](docs/milestone-6.md) for lifecycle details, complete validation and limits.
 
+To play **combined arms**, open `scenes/combined_arms_assault.tscn` and press **F6**, or run:
+
+```powershell
+& $godot --path . res://scenes/combined_arms_assault.tscn
+```
+
+Milestone 7 adds **Build Vehicle Factory** alongside **Build Barracks** at the HQ. The factory costs **600 credits**, takes **15 simulated seconds** after navigation preparation, and trains the existing **Rocket Vehicle for 250 credits / 8 seconds**. It has 450 HP and five queue slots, including a completed vehicle waiting at a blocked exit. The blue-gray garage and raised gold roof rails distinguish it from the barracks. Both buildings use the existing single unfinished-site limit, shared wallet, cancellation, safe deployment and right-click rally controls. No barracks prerequisite is needed for the factory.
+
+Start with the same 1000 credits, collectors, supplies and small force, with neither production building. Harvest to fund both structures and their units, then attack the coral HQ while protecting yours. The original 90-second enemy assault, victory/defeat/draw and Restart remain. Restart reloads this combined-arms scene with clean initial state. Earlier scenes, including the original base assault, retain their defaults. See [Milestone 7](docs/milestone-7.md) for exact configuration, automated acceptance and preserved deferred movement limitations.
+
 ## Controls
 
 | Input | Behavior |

@@ -10,6 +10,7 @@ var reason: String = ""
 var point := Vector3.ZERO
 var valid: bool = false
 var last_result: ConstructionResult
+var definition: ConstructionDefinition
 var _headquarters: WeakRef
 var _owner: int = 0
 var _pointer := Vector2.ZERO
@@ -43,11 +44,14 @@ func _ready() -> void:
 	status.hide()
 
 
-func begin(headquarters: RTSBuilding) -> bool:
+func begin(headquarters: Variant, choice: ConstructionDefinition = null) -> bool:
 	var owner := field.selection.friendly_owner_id
-	reason = field.construction.can_begin(owner, headquarters, field.construction_definition)
+	var requested := choice if choice != null else field.construction_definition
+	reason = field.construction.can_begin(owner, headquarters, requested)
 	if not reason.is_empty():
 		return false
+	definition = requested
+	(preview.mesh as BoxMesh).size = Vector3(definition.footprint.x, definition.height, definition.footprint.y)
 	_generation += 1
 	_owner = owner
 	_headquarters = weakref(headquarters)
@@ -107,7 +111,7 @@ func _physics_process(delta: float) -> void:
 			reason = "Point at flat ground inside the green boundary"
 			continue
 		var manager := field.construction
-		var result := manager.place(_owner, headquarters, field.construction_definition, hit["position"])
+		var result := manager.place(_owner, headquarters, definition, hit["position"])
 		if not is_instance_valid(self) or not is_instance_valid(field):
 			return
 		last_result = result
@@ -125,13 +129,13 @@ func _physics_process(delta: float) -> void:
 	preview.visible = not hit.is_empty() and not field.camera_rig.pointer_over_interface()
 	if not hit.is_empty():
 		point = hit["position"]
-		preview.position = point + Vector3.UP * field.construction_definition.height / 2.0
+		preview.position = point + Vector3.UP * definition.height / 2.0
 	if _cooldown <= 0.0:
 		_cooldown = 0.1
-		reason = field.construction.validate(_owner, headquarters, field.construction_definition, point) if not hit.is_empty() else "Point at flat ground inside the green boundary"
+		reason = field.construction.validate(_owner, headquarters, definition, point) if not hit.is_empty() else "Point at flat ground inside the green boundary"
 		valid = reason.is_empty()
 		_material.albedo_color = Color(0.35, 1, 0.65, 0.35) if valid else Color(1, 0.25, 0.2, 0.4)
-		status.text = ("Valid · %d credits · left click to build" % field.construction_definition.credit_cost if valid else "Cannot build · " + reason) + "\nRight click / Escape · Cancel placement"
+		status.text = ("Valid · %d credits · left click to build" % definition.credit_cost if valid else "Cannot build · " + reason) + "\nRight click / Escape · Cancel placement"
 
 
 func _ground(screen: Vector2) -> Dictionary:

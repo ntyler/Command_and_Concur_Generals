@@ -29,8 +29,8 @@ func can_begin(requester: int, headquarters: Variant, definition: ConstructionDe
 	var owner := field()
 	if owner == null or not is_instance_valid(headquarters) or not headquarters is RTSBuilding or not owner.contains_building(headquarters) or headquarters.kind != RTSBuilding.Kind.HEADQUARTERS or headquarters.owner_id != requester:
 		return "Select a live owned headquarters"
-	if definition == null or definition != owner.construction_definition or not definition.is_valid():
-		return "Unsupported barracks definition"
+	if not owner.supports_construction(definition) or not definition.is_valid():
+		return "Unsupported building definition"
 	if unfinished_id != 0:
 		var pending := sites.get(unfinished_id) as ConstructionSite
 		if pending != null and pending.state == ConstructionSite.State.CANCELLING:
@@ -39,7 +39,7 @@ func can_begin(requester: int, headquarters: Variant, definition: ConstructionDe
 	if navigation.blocked:
 		return "Navigation is not ready"
 	if owner.credits.balance(requester) < definition.credit_cost:
-		return "Insufficient credits: barracks costs %d" % definition.credit_cost
+		return "Insufficient credits: %s costs %d" % [definition.display_name(), definition.credit_cost]
 	return ""
 
 
@@ -73,10 +73,11 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 	body.site = site
 	body.operational = false
 	body.owner_id = requester
-	body.kind = RTSBuilding.Kind.BARRACKS
+	body.kind = definition.kind
+	body.recipe = load("res://production/rocket_vehicle.tres") if body.kind == RTSBuilding.Kind.VEHICLE_FACTORY else load("res://production/rifle.tres")
 	body.footprint = definition.footprint
 	body.building_height = definition.height
-	body.name = "BuiltBarracks%d" % site.site_id
+	body.name = "Built%s%d" % [definition.display_name().replace(" ", ""), site.site_id]
 	body.position = point
 	site.body_ref = weakref(body)
 	body.tree_exiting.connect(_departed.bind(site.site_id))
@@ -89,7 +90,7 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 		elif site.state == ConstructionSite.State.PREPARING:
 			site.nav_generation = _request_navigation()
 	# Historical acceptance survives a listener cancelling this committed site.
-	var result := ConstructionResult.accept(site.site_id, site.paid, "Barracks site accepted")
+	var result := ConstructionResult.accept(site.site_id, site.paid, "%s site accepted" % definition.display_name())
 	wallet.publish(requester)
 	if field() != null:
 		changed.emit(site.site_id)
