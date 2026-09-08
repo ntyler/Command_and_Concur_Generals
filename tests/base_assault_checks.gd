@@ -179,7 +179,7 @@ func _destruction_lifecycle() -> void:
 	var enemy := battle.units[3]
 	_check(building.health != null and not building.can_take_damage() and TeamRules.damage_target(battle, 2, building, 100, enemy) == 0, "unfinished site remains immune with its original paid cancellation lifecycle")
 	if not await _complete_site(site): return
-	_check(building.can_take_damage() and building.health.current == 450 and building.health_label.visible, "completion enables configured barracks health and feedback")
+	_check(building.can_take_damage() and building.health.current == 450 and building._identity_label.visible and not building.health_label.visible and building.health_bar.visible == building.selection_indicator.visible, "completion enables configured barracks health with compact identity and contextual health feedback")
 	var producer := building.production
 	_check(producer.enqueue(1, building.recipe).accepted, "destruction fixture first pays for a real deployed Rifle")
 	if not await _until(func() -> bool: return producer.count() == 0, 7, "first destruction-fixture Rifle actually deploys"): return

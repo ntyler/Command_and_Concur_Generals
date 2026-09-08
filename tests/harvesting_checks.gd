@@ -51,9 +51,25 @@ func _fresh_harvest(supplies: int = 2000, starting: int = 1000) -> void:
 	root.add_child(harvest)
 	current_scene = harvest
 	harvest.camera_rig.edge_scrolling_enabled = false
-	await _frames(5)
+	# Successive fields share the viewport's World3D navigation map. A nonzero
+	# map iteration may still describe the departed region; wait for this field's
+	# region to own both collector starts before issuing navigation-dependent work.
+	for tick in 60:
+		await _frames(1)
+		if _current_harvest_navigation():
+			break
 	_check(harvest.credits.balance(1) == starting and harvest.caches[0].remaining == supplies and harvest.collectors[0].harvesting.cargo == 0, "fresh configuration resets wallet, cache and cargo")
-	_check(harvest._access_claims.is_empty() and NavigationServer3D.map_get_iteration_id(harvest.get_world_3d().get_navigation_map()) > 0, "fresh synchronized navigation has no stale access claims")
+	_check(harvest._access_claims.is_empty() and _current_harvest_navigation(), "fresh synchronized navigation belongs to current field and has no stale access claims")
+
+
+func _current_harvest_navigation() -> bool:
+	var map := harvest.get_world_3d().get_navigation_map()
+	if NavigationServer3D.map_get_iteration_id(map) == 0:
+		return false
+	for unit in harvest.collectors:
+		if NavigationServer3D.map_get_closest_point_owner(map, unit.global_position) != harvest.navigation_region.get_rid():
+			return false
+	return true
 
 
 func _until(predicate: Callable, seconds: float, description: String) -> bool:
@@ -198,7 +214,10 @@ func _quantity_checks() -> void:
 	first.harvesting.transferred.connect(func(result: HarvestTransfer) -> void:
 		if result.kind == HarvestTransfer.Kind.LOAD: bounded_loads.append(result.amount)
 	)
-	_check(_complete(harvest.issue_harvest(harvest.caches[0])), "non-multiple capacity configuration accepts harvesting")
+	var capacity_order := harvest.issue_harvest(harvest.caches[0])
+	if not _complete(capacity_order):
+		print("HARVEST_CAPACITY_REJECTION: intended=%s accepted=%s superseded=%s reason=%s current_region_ready=%s selected=%s" % [capacity_order.intended_ids, capacity_order.accepted_ids, capacity_order.superseded, first.harvesting.last_rejection, _current_harvest_navigation(), harvest.selection.selected_units() == [first]])
+	_check(_complete(capacity_order), "non-multiple capacity configuration accepts harvesting")
 	await _until(func() -> bool: return harvest.credits.balance(1) == 52 and first.harvesting.state == CollectorHarvest.State.IDLE, 30, "configured capacity makes two real collection trips")
 	_check(bounded_loads == [25, 10, 17] and first.harvesting.cargo == 0, "transfers clamp independently to interval amount, remaining capacity and final cache contents")
 
@@ -493,10 +512,10 @@ func _harvest_ui_checks() -> void:
 	_check(harvest.harvest_panel.label.text.contains("Cargo 0 / 100") and harvest.harvest_panel.label.text.contains("200 remaining"), "selected collector panel shows cargo and assigned-cache contents")
 	await _capture("harvesting_panel")
 	var version := work.generation
-	await _click(harvest.harvest_panel.position + Vector2(20, 20), MOUSE_BUTTON_RIGHT)
+	await _click(harvest.harvest_panel.get_global_rect().position + Vector2(20, 20), MOUSE_BUTTON_RIGHT)
 	_check(work.generation == version, "cargo panel consumes contextual mouse commands")
 	await _until(func() -> bool: return work.cargo == 25, 10, "UI fixture loads real cargo")
-	_motion(harvest.harvest_panel.position + Vector2(20, 20))
+	_motion(harvest.harvest_panel.get_global_rect().position + Vector2(20, 20))
 	await _frames(2)
 	_key_x()
 	await _frames(2)

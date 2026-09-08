@@ -18,6 +18,7 @@ var _dirty: bool = true
 var _pending_moves: Array[Vector3] = []
 var _group_text: String = "Groups  —"
 var _group_tail: String = ""
+var _group_counts: Array[Vector2i] = []
 var _style := StyleBoxFlat.new()
 
 
@@ -165,13 +166,16 @@ func _construction_changed(_identity: int) -> void:
 
 func _groups_changed() -> void:
 	var labels := PackedStringArray()
+	_group_counts.clear()
 	if groups != null:
 		for index in range(1, 10):
 			var count := groups.group_members(index).size()
 			if count > 0:
-				labels.append("%d:%d" % [index, count])
-	_group_text = "Groups  " + ("  ".join(labels.slice(0, 4)) if not labels.is_empty() else "—")
-	_group_tail = "  ".join(labels.slice(4))
+				labels.append("Group %d · %d %s" % [index, count, "unit" if count == 1 else "units"])
+				_group_counts.append(Vector2i(index, count))
+	_group_text = labels[0] if labels.size() == 1 else "Groups · none assigned"
+	_group_tail = ""
+	tooltip_text = "\n".join(labels) if not labels.is_empty() else "Ctrl + 1–9 · Assign selected units"
 	queue_redraw()
 
 
@@ -210,7 +214,15 @@ func _draw() -> void:
 		outline.append(outline[0])
 		draw_polyline(outline, Color(1, 1, 1, 0.85), 1.25, true)
 	draw_rect(mapping.content_rect.grow(1), Color("709294"), false, 1)
-	# Two compact rows hold all nine assigned groups at the narrowest layout.
-	draw_string(font, Vector2(12, size.y - 19), _group_text, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 12, Color("ffce78"))
-	if not _group_tail.is_empty():
-		draw_string(font, Vector2(12, size.y - 5), _group_tail, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 12, Color("ffce78"))
+	if _group_counts.size() <= 1:
+		draw_string(font, Vector2(12, size.y - 14), _group_text, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 12, Color("ffce78"))
+	else:
+		# Numbered chips: gold group key, white valid unit count (u = units).
+		# Two rows preserve the existing map dimensions and coordinate mapping.
+		var chip_width := (size.x - 24) / 5.0
+		for index in _group_counts.size():
+			var entry := _group_counts[index]
+			var origin := Vector2(12 + (index % 5) * chip_width, size.y - 31 + (index / 5) * 15)
+			draw_style_box(_style, Rect2(origin, Vector2(chip_width - 3, 14)))
+			draw_string(font, origin + Vector2(3, 11), str(entry.x), HORIZONTAL_ALIGNMENT_LEFT, 10, 11, Color("ffce78"))
+			draw_string(font, origin + Vector2(15, 11), "%du" % entry.y, HORIZONTAL_ALIGNMENT_LEFT, chip_width - 18, 11, Color.WHITE)

@@ -23,7 +23,7 @@ func _ready() -> void:
 	headquarters.tree_exiting.connect(_release_target.bind(headquarters.get_instance_id()))
 	harvest_panel = HarvestPanel.new()
 	harvest_panel.field = self
-	get_node("ControlsFeedback").add_child(harvest_panel)
+	production_panel.context_content.add_child(harvest_panel)
 	(info_panel.get_child(0).get_child(0) as Label).text = "FIELDWORK  /  HARVESTING"
 	var controls := info_panel.get_child(0).get_child(1) as Label
 	controls.text += "\nCollectors + right click · Harvest / deposit"
@@ -32,6 +32,12 @@ func _ready() -> void:
 func _build_field() -> void:
 	obstacles.append_array(CACHE_FOOTPRINTS)
 	super._build_field()
+
+
+func set_movement_debug(enabled: bool) -> void:
+	super.set_movement_debug(enabled)
+	for cache in registered_caches():
+		cache.set_movement_debug(enabled)
 
 
 func _unit_count() -> int:
@@ -88,6 +94,7 @@ func register_cache(cache: SupplyCache) -> void:
 		return
 	var id := cache.get_instance_id()
 	_caches[id] = weakref(cache)
+	cache.set_movement_debug(movement_debug)
 	var exiting := _cache_exiting.bind(id)
 	if not cache.tree_exiting.is_connected(exiting):
 		cache.tree_exiting.connect(exiting)

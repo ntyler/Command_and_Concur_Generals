@@ -17,6 +17,9 @@ var _focused: bool = true
 
 func _ready() -> void:
 	get_window().focus_exited.connect(_clear_tap)
+	# A UI interaction breaks a gameplay double-tap even when GUI consumes its
+	# keys before _unhandled_key_input. Acquiring or releasing focus starts fresh.
+	get_viewport().gui_focus_changed.connect(_clear_tap.unbind(1))
 
 
 func _enabled() -> bool:
@@ -106,6 +109,13 @@ func _resolve(identity: int) -> RTSUnit:
 	var unit := (entry["unit"] as WeakRef).get_ref() as RTSUnit
 	if not is_instance_valid(unit) or entry["field_id"] != field.get_instance_id() or unit.unit_id != entry["unit_id"] or not unit.is_alive() or unit.is_queued_for_deletion():
 		return null
+	# queue_free on a container is immediate group ineligibility, before its
+	# descendants receive tree_exiting. Keep this gate local to group recall.
+	var ancestor := unit.get_parent()
+	while ancestor != null and ancestor != field:
+		if ancestor.is_queued_for_deletion():
+			return null
+		ancestor = ancestor.get_parent()
 	return unit
 
 

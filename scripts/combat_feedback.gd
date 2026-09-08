@@ -5,6 +5,7 @@ extends Node3D
 var unit: RTSUnit
 var health: UnitHealth
 var display_name: String
+var health_bar: WorldHealthBar
 var health_fill: MeshInstance3D
 var health_label: Label3D
 var flash_remaining: float = 0.0
@@ -20,23 +21,16 @@ func _ready() -> void:
 	for child in unit._visual.get_children(): # Construction only, never a physics search.
 		if child is MeshInstance3D:
 			_body_materials.append(child.material_override as StandardMaterial3D)
-	health_fill = MeshInstance3D.new()
-	var mesh := QuadMesh.new()
-	mesh.size = Vector2(1.8, 0.18)
-	health_fill.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color("91f4ad")
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	health_fill.material_override = material
-	health_fill.position.y = 1.8
-	add_child(health_fill)
+	health_bar = WorldHealthBar.new()
+	health_bar.position.y = 1.65
+	add_child(health_bar)
+	health_fill = health_bar.fill
 	health_label = Label3D.new()
-	health_label.font_size = 32
+	health_label.font_size = 28
 	health_label.outline_size = 4
 	health_label.pixel_size = 0.02
 	health_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	health_label.position.y = 2.7
+	health_label.position.y = 2.65
 	add_child(health_label)
 	health.damaged.connect(_on_damaged)
 	unit.availability_changed.connect(_refresh_team)
@@ -51,11 +45,25 @@ func _refresh_team() -> void:
 
 
 func _refresh_health() -> void:
-	health_fill.scale.x = maxf(0.001, health.current / health.maximum)
+	health_bar.update_ratio(health.current / health.maximum)
 	health_label.text = "%s\n%d / %d" % [display_name, ceili(health.current), ceili(health.maximum)]
-	if fire_blocked:
+	if not unit.movement_debug and fire_blocked:
+		health_label.text = "BLOCKED"
+	elif fire_blocked:
 		health_label.text += "\nBLOCKED"
 	health_label.modulate = Color("ffce78") if fire_blocked else Color.WHITE
+	refresh_visibility()
+
+
+func refresh_visibility() -> void:
+	var alive := health.is_alive()
+	health_bar.visible = alive and (unit.selection_indicator.visible or health.current < health.maximum or unit.movement_debug)
+	health_label.visible = alive and (unit.movement_debug or fire_blocked)
+
+
+func refresh_debug() -> void:
+	_refresh_health()
+	refresh_fire_debug()
 
 
 func _on_damaged(_amount: float, _source: Node) -> void:

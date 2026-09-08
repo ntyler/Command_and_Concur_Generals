@@ -13,6 +13,7 @@ var static_footprints: Array[Rect2] = []
 var _placement_shape := BoxShape3D.new()
 var _placement_query := PhysicsShapeQueryParameters3D.new()
 var _ground_query := PhysicsRayQueryParameters3D.new()
+var placement_guides: MeshInstance3D
 
 
 func _ready() -> void:
@@ -29,9 +30,16 @@ func _ready() -> void:
 	placement.name = "BarracksPlacement"
 	add_child(placement)
 	(info_panel.get_child(0).get_child(0) as Label).text = "FIELDWORK  /  CONSTRUCTION"
-	_outline(BUILD_AREA, Color("7eb9a0"))
-	for rectangle in protected_areas():
-		_outline(rectangle, Color("b6a677"))
+	placement_guides = MeshInstance3D.new()
+	placement_guides.name = "PlacementAccessGuides"
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.vertex_color_use_as_albedo = true
+	placement_guides.material_override = material
+	add_child(placement_guides)
+	construction.changed.connect(_refresh_placement_guides)
+	construction.navigation.ready.connect(_refresh_placement_guides)
+	_refresh_placement_guides()
 	(production_panel as ConstructionPanel).refresh_construction()
 
 
@@ -153,21 +161,40 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 	return ""
 
 
-func _outline(rectangle: Rect2, color: Color) -> void:
+func set_movement_debug(enabled: bool) -> void:
+	super.set_movement_debug(enabled)
+	update_placement_guides_visibility()
+
+
+func update_placement_guides_visibility() -> void:
+	if is_instance_valid(placement_guides):
+		var relevant := movement_debug or (is_instance_valid(placement) and placement.active)
+		if relevant and not placement_guides.visible:
+			_refresh_placement_guides()
+		placement_guides.visible = relevant
+
+
+func _refresh_placement_guides(_site_id: int = 0) -> void:
+	if not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(placement_guides):
+		return
+	# Presentation of the same validation rectangles, rebuilt only on lifecycle
+	# changes. A single persistent node makes repeated F3 toggles allocation-free.
 	var mesh := ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	_outline(mesh, BUILD_AREA, Color("7eb9a0"))
+	for rectangle in protected_areas():
+		_outline(mesh, rectangle, Color("b6a677"))
+	mesh.surface_end()
+	placement_guides.mesh = mesh
+	placement_guides.visible = movement_debug or (is_instance_valid(placement) and placement.active)
+
+
+func _outline(mesh: ImmediateMesh, rectangle: Rect2, color: Color) -> void:
+	mesh.surface_set_color(color)
 	var corners := [rectangle.position, Vector2(rectangle.end.x, rectangle.position.y), rectangle.end, Vector2(rectangle.position.x, rectangle.end.y)]
 	for i in 4:
 		for point: Vector2 in [corners[i], corners[(i + 1) % 4]]:
 			mesh.surface_add_vertex(Vector3(point.x, 0.025, point.y))
-	mesh.surface_end()
-	var visual := MeshInstance3D.new()
-	visual.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
-	visual.material_override = material
-	add_child(visual)
 
 
 func destroy_building(building: RTSBuilding) -> void:

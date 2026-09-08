@@ -53,6 +53,12 @@ func create_production_panel() -> ProductionPanel:
 	return ProductionPanel.new()
 
 
+func set_movement_debug(enabled: bool) -> void:
+	super.set_movement_debug(enabled)
+	for building in registered_buildings():
+		building.set_movement_debug(enabled)
+
+
 func _unit_count() -> int:
 	return STARTS.size()
 
@@ -100,6 +106,7 @@ func register_building(building: RTSBuilding) -> void:
 	if _closing or not is_instance_valid(building) or not is_ancestor_of(building) or building.is_queued_for_deletion() or not building.is_alive():
 		return
 	building.gameplay_field = self
+	building.set_movement_debug(movement_debug)
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
 	if building.kind in [RTSBuilding.Kind.BARRACKS, RTSBuilding.Kind.VEHICLE_FACTORY] and not _producers.has(id):

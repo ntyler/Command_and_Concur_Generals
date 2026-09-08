@@ -63,6 +63,7 @@ func begin(headquarters: Variant, choice: ConstructionDefinition = null) -> bool
 	field.selection.placement_active = true
 	_cooldown = 0.0
 	status.show()
+	field.update_placement_guides_visibility()
 	return true
 
 
@@ -73,6 +74,7 @@ func cancel() -> void:
 	_pending.clear()
 	if is_instance_valid(field) and is_instance_valid(field.selection):
 		field.selection.placement_active = false
+		field.update_placement_guides_visibility()
 	if is_instance_valid(preview):
 		preview.hide()
 	if is_instance_valid(status):

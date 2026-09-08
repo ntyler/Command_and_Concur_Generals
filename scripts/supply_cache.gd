@@ -18,6 +18,7 @@ var depleted: bool:
 	get: return remaining == 0
 var _goods: MeshInstance3D
 var _label: Label3D
+var movement_debug: bool = false
 
 
 func _ready() -> void:
@@ -34,8 +35,8 @@ func _ready() -> void:
 	_goods = _box(Vector3(footprint.x - 0.4, 1.2, footprint.y - 0.4), Vector3(0, 0.9, 0), Color("d6ad55"))
 	_label = Label3D.new()
 	_label.position.y = 2.4
-	_label.font_size = 40
-	_label.pixel_size = 0.027
+	_label.font_size = 32
+	_label.pixel_size = 0.025
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(_label)
 	_refresh()
@@ -51,9 +52,17 @@ func refresh_presentation() -> void:
 	_refresh()
 
 
+func set_movement_debug(enabled: bool) -> void:
+	movement_debug = enabled
+	if is_instance_valid(_label):
+		_refresh()
+
+
 func _refresh() -> void:
 	_goods.visible = not depleted
 	_label.text = "Supply %d%s" % [cache_id, " · Empty" if depleted else ""]
+	if movement_debug:
+		_label.text += "\n%d remaining" % remaining
 
 
 func _box(size: Vector3, center: Vector3, color: Color) -> MeshInstance3D:

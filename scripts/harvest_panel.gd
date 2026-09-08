@@ -1,25 +1,23 @@
 class_name HarvestPanel
 extends PanelContainer
-## Contextual cargo only; the existing production panel remains the credit UI.
+## Collector details nested in the shared selection panel. No selection authority.
 
 var field: HarvestField
 var label: Label
-var _selected: Array[WeakRef] = []
+var _connections: Array[Dictionary] = []
+var _refreshing: bool = false
+var _rejection_observers: Array[Dictionary] = []
 var _elapsed: float = 0.0
+var _closing: bool = false
 
 
 func _ready() -> void:
-	position = Vector2(930, 300)
-	custom_minimum_size = Vector2(330, 0)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	mouse_force_pass_scroll_events = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.045, 0.085, 0.11, 0.96)
-	style.set_content_margin_all(14)
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	label = Label.new()
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size.x = 300
+	label.add_theme_font_size_override("font_size", 14)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(label)
 	field.selection.selection_changed.connect(_selection_changed)
@@ -27,34 +25,91 @@ func _ready() -> void:
 
 
 func _selection_changed(_count: int) -> void:
-	_selected.clear()
-	for unit in field.selection.selected_units():
-		if unit is CollectorTruck:
-			_selected.append(weakref(unit))
 	_refresh()
 
 
 func _process(delta: float) -> void:
-	if _selected.is_empty():
+	# Rejected can_order() writes last_rejection without a work.changed signal.
+	# Retain the prior 10 Hz presentation update only for that scalar; ordinary
+	# cargo, activity and membership changes use their existing lifecycle signals.
+	if _rejection_observers.is_empty():
 		return
 	_elapsed += delta
-	if _elapsed >= 0.1:
-		_elapsed = 0.0
-		_refresh()
+	if _elapsed < 0.1:
+		return
+	_elapsed = 0.0
+	for observation in _rejection_observers:
+		var work := observation["work"].get_ref() as CollectorHarvest
+		if work != null and work.last_rejection != observation["reason"]:
+			_refresh()
+			return
 
 
 func _refresh() -> void:
+	if _refreshing or not _context_active():
+		return
+	_refreshing = true
+	_disconnect_observers()
+	_rejection_observers.clear()
 	var lines := PackedStringArray()
-	for reference in _selected:
-		var unit := reference.get_ref() as CollectorTruck
-		if not is_instance_valid(unit) or not field.harvest_member(unit):
+	var selected := field.selection.selected_units()
+	# Pruning can notify listeners that remove this field before the getter returns.
+	if not _context_active():
+		_refreshing = false
+		return
+	for candidate in selected:
+		var unit := candidate as CollectorTruck
+		if unit == null or not field.harvest_member(unit):
 			continue
 		var work := unit.harvesting
-		lines.append("Collector %d · Cargo %d / %d\n%s" % [unit.unit_id, work.cargo, unit.cargo_capacity, work.reason])
+		_rejection_observers.append({"work": weakref(work), "reason": work.last_rejection})
+		_watch(work, &"changed")
+		_watch(unit, &"movement_state_changed", 1)
+		_watch(unit, &"availability_changed")
+		var identity := "Collector #%d · " % unit.unit_id if selected.size() > 1 else ""
+		var activity := work.reason
+		if work.state == CollectorHarvest.State.IDLE and unit.moving:
+			activity = "Moving"
+		elif work.state == CollectorHarvest.State.IDLE and unit.movement_state == RTSUnit.MovementState.FAILED:
+			activity = "Movement failed"
+		lines.append("%sCargo %d / %d · %s" % [identity, work.cargo, unit.cargo_capacity, activity])
 		var cache := work.cache_node()
 		if is_instance_valid(cache) and field.contains_cache(cache):
+			_watch(cache.notifications, &"changed")
+			_watch(cache, &"tree_exiting")
 			lines.append("Supply %d · %d remaining" % [cache.cache_id, cache.remaining])
 		if not work.last_rejection.is_empty():
 			lines.append(work.last_rejection)
 	visible = not lines.is_empty()
 	label.text = "\n".join(lines)
+	_refreshing = false
+	field.production_panel._layout.call_deferred()
+
+
+func _context_active() -> bool:
+	return not _closing and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion() and is_instance_valid(field.selection) and field.selection.is_inside_tree()
+
+
+func _watch(emitter: Object, event: StringName, arguments: int = 0) -> void:
+	var callback := _refresh.unbind(arguments) if arguments > 0 else _refresh
+	if emitter.is_connected(event, callback):
+		return # Two selected collectors can share the same supply notification.
+	emitter.connect(event, callback)
+	_connections.append({"emitter": weakref(emitter), "event": event, "callback": callback})
+
+
+func _disconnect_observers() -> void:
+	for connection in _connections:
+		var emitter: Object = connection["emitter"].get_ref()
+		if is_instance_valid(emitter) and emitter.is_connected(connection["event"], connection["callback"]):
+			emitter.disconnect(connection["event"], connection["callback"])
+	_connections.clear()
+
+
+func _exit_tree() -> void:
+	_closing = true
+	_disconnect_observers()
+	_rejection_observers.clear()
+	if is_instance_valid(field) and is_instance_valid(field.selection) and field.selection.selection_changed.is_connected(_selection_changed):
+		field.selection.selection_changed.disconnect(_selection_changed)
+	field = null

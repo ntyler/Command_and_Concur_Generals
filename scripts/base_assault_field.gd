@@ -23,6 +23,7 @@ var objective_label: Label
 var result_overlay: ColorRect
 var result_label: Label
 var restart_button: Button
+var help_panel: RTSHelpPanel
 
 class ResultResolver extends Node:
 	var field: BaseAssaultField
@@ -80,6 +81,50 @@ func _ready() -> void:
 		tactical_minimap.field = self
 		tactical_minimap.groups = control_groups
 		get_node("ControlsFeedback").add_child(tactical_minimap)
+		_compact_help()
+
+
+func _compact_help() -> void:
+	# Keep the existing command feedback label and all its acceptance semantics.
+	status_label.reparent(objective_label.get_parent())
+	status_label.add_theme_font_size_override("font_size", 13)
+	var old_guide := info_panel
+	old_guide.get_parent().remove_child(old_guide)
+	old_guide.queue_free()
+	# Last input observer: open Help owns Escape before selection's _input hook.
+	# The layer has no full-screen Control and cannot catch battlefield clicks.
+	var layer := CanvasLayer.new()
+	layer.name = "HelpHUD"
+	layer.layer = 1
+	add_child(layer)
+	help_panel = RTSHelpPanel.new()
+	help_panel.field = self
+	layer.add_child(help_panel)
+	info_panel = help_panel
+	help_panel.resized.connect(_layout_placement_status)
+	production_panel.resized.connect(_layout_placement_status)
+	get_viewport().size_changed.connect(_layout_placement_status)
+	_layout_placement_status.call_deferred()
+
+
+func _layout_placement_status() -> void:
+	if not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(help_panel) or not help_panel.is_inside_tree() or not is_instance_valid(production_panel) or not production_panel.is_inside_tree() or not is_instance_valid(placement) or not is_instance_valid(placement.status):
+		return
+	var left := help_panel.get_global_rect().end.x + 20.0
+	var right := production_panel.get_global_rect().position.x - 20.0
+	var width := minf(460.0, maxf(100.0, right - left))
+	placement.status.position = Vector2(left + (right - left - width) * 0.5, 20)
+	placement.status.size = Vector2(width, 70)
+
+
+func _exit_tree() -> void:
+	if get_viewport().size_changed.is_connected(_layout_placement_status):
+		get_viewport().size_changed.disconnect(_layout_placement_status)
+	if is_instance_valid(help_panel) and help_panel.resized.is_connected(_layout_placement_status):
+		help_panel.resized.disconnect(_layout_placement_status)
+	if is_instance_valid(production_panel) and production_panel.resized.is_connected(_layout_placement_status):
+		production_panel.resized.disconnect(_layout_placement_status)
+	super._exit_tree()
 
 
 func _physics_process(delta: float) -> void:
@@ -141,6 +186,9 @@ func resolve_result() -> void:
 			child.process_mode = Node.PROCESS_MODE_DISABLED
 	production_panel.hide()
 	harvest_panel.hide()
+	if is_instance_valid(help_panel):
+		help_panel.set_open(false)
+		help_panel.hide()
 	result_label.text = ["", "VICTORY", "DEFEAT", "DRAW"][result]
 	result_overlay.show()
 	_update_objective()
@@ -160,9 +208,7 @@ func _update_objective() -> void:
 	if not is_instance_valid(objective_label):
 		return
 	var phase := "Enemy assault underway" if assault_issued else "Enemy assault in %ds" % ceili(maxf(0, assault_delay - elapsed))
-	objective_label.text = "DESTROY THE CORAL HQ · PROTECT YOUR HQ\nBuild barracks → harvest supplies → train Rifles → attack\n" + phase
-	if vehicle_factory_definition != null:
-		objective_label.text = "DESTROY THE CORAL HQ · PROTECT YOUR HQ\nHarvest → build barracks + factory → train Rifles + Rockets\n" + phase
+	objective_label.text = "Destroy enemy HQ · Protect your HQ\n" + phase
 
 
 func _build_match_ui() -> void:
@@ -177,8 +223,8 @@ func _build_match_ui() -> void:
 	var objective := PanelContainer.new()
 	objective.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	objective.offset_left = 20
-	objective.offset_right = 650
-	objective.offset_top = -102
+	objective.offset_right = 540
+	objective.offset_top = -102 if tactical_interface_enabled else -78
 	objective.offset_bottom = -20
 	objective.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
@@ -186,10 +232,13 @@ func _build_match_ui() -> void:
 	style.set_content_margin_all(12)
 	objective.add_theme_stylebox_override("panel", style)
 	layout.add_child(objective)
+	var objective_column := VBoxContainer.new()
+	objective_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	objective.add_child(objective_column)
 	objective_label = Label.new()
 	objective_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	objective_label.add_theme_color_override("font_color", Color("ffce78"))
-	objective.add_child(objective_label)
+	objective_column.add_child(objective_label)
 	result_overlay = ColorRect.new()
 	result_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_overlay.color = Color(0.025, 0.05, 0.075, 0.88)

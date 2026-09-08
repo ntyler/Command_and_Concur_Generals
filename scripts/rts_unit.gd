@@ -149,7 +149,7 @@ func _ready() -> void:
 	add_child(waypoint_indicator)
 	waypoint_indicator.top_level = true
 	debug_label = Label3D.new()
-	debug_label.position.y = 1.7
+	debug_label.position.y = 3.9
 	debug_label.font_size = 24
 	debug_label.pixel_size = 0.012
 	debug_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -175,6 +175,8 @@ func _build_visual() -> void:
 
 func set_selected(selected: bool) -> void:
 	selection_indicator.visible = selected
+	if is_instance_valid(combat) and is_instance_valid(combat.feedback):
+		combat.feedback.refresh_visibility()
 
 
 func _sync_crowd_mode() -> void:
@@ -747,7 +749,7 @@ func _set_state(state: MovementState) -> void:
 func set_movement_debug(enabled: bool) -> void:
 	movement_debug = enabled
 	if is_instance_valid(combat) and is_instance_valid(combat.feedback):
-		combat.feedback.refresh_fire_debug()
+		combat.feedback.refresh_debug()
 	destination_indicator.visible = enabled and show_destination and order_version > 0
 	waypoint_indicator.visible = enabled
 	debug_label.visible = enabled

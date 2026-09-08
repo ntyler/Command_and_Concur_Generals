@@ -15,8 +15,10 @@ var production: UnitProduction
 signal availability_changed
 var gameplay_field: ProductionField
 var health: UnitHealth
+var health_bar: WorldHealthBar
 var health_label: Label3D
 var _identity_label: Label3D
+var movement_debug: bool = false
 var destroyed: bool = false
 var _departing: bool = false
 var operational: bool = true:
@@ -66,8 +68,8 @@ func _ready() -> void:
 	label.text = "%s · %d" % [display_name(), owner_id]
 	label.position.y = building_height + 0.6
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.font_size = 40
-	label.pixel_size = 0.027
+	label.font_size = 32
+	label.pixel_size = 0.025
 	add_child(label)
 	selection_indicator = _mesh(Vector3(footprint.x + 0.25, 0.02, footprint.y + 0.25), Vector3(0, 0.035, 0), Color("86ffcb"))
 	selection_indicator.hide()
@@ -83,6 +85,7 @@ func _ready() -> void:
 	add_child(rally_indicator)
 	rally_indicator.top_level = true
 	rally_indicator.hide()
+	_refresh_health()
 
 
 func _physics_process(delta: float) -> void:
@@ -97,6 +100,12 @@ func set_selected(selected: bool) -> void:
 		rally_indicator.visible = selected and production != null and production.has_rally
 		if rally_indicator.visible:
 			rally_indicator.global_position = production.rally_point + Vector3.UP * 0.1
+	_refresh_health()
+
+
+func set_movement_debug(enabled: bool) -> void:
+	movement_debug = enabled
+	_refresh_health()
 
 
 func enable_damage(maximum: float) -> void:
@@ -108,11 +117,15 @@ func enable_damage(maximum: float) -> void:
 	add_child(health)
 	health.damaged.connect(_on_damage)
 	health.died.connect(_on_died)
+	health_bar = WorldHealthBar.new()
+	health_bar.bar_width = minf(3.8, footprint.x - 0.4)
+	health_bar.position.y = building_height + 1.2
+	add_child(health_bar)
 	health_label = Label3D.new()
-	health_label.position.y = building_height + 1.0
+	health_label.position.y = building_height + 1.85
 	health_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	health_label.font_size = 38
-	health_label.pixel_size = 0.025
+	health_label.font_size = 26
+	health_label.pixel_size = 0.022
 	add_child(health_label)
 	_refresh_health()
 
@@ -126,10 +139,15 @@ func can_take_damage() -> bool:
 
 
 func _refresh_health() -> void:
+	if is_instance_valid(_identity_label):
+		_identity_label.visible = is_alive()
+		_identity_label.text = "%s · %d" % [display_name(), owner_id]
+		_identity_label.modulate = Color("86ffcb") if owner_id == 1 else Color("ffa18c")
 	if is_instance_valid(health_label):
-		_identity_label.visible = not operational and is_alive()
-		health_label.visible = operational and is_alive()
-		health_label.text = "%s · %d\n%d / %d HP" % [display_name(), owner_id, ceili(health.current), ceili(health.maximum)]
+		health_bar.update_ratio(health.current / health.maximum)
+		health_bar.visible = operational and is_alive() and (selection_indicator.visible or health.current < health.maximum or movement_debug)
+		health_label.visible = operational and is_alive() and movement_debug
+		health_label.text = "%d / %d HP" % [ceili(health.current), ceili(health.maximum)]
 		health_label.modulate = Color("86ffcb") if owner_id == 1 else Color("ffa18c")
 
 

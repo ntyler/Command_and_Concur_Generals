@@ -11,16 +11,14 @@ func display_name() -> String:
 
 func _ready() -> void:
 	super._ready()
-	for child in get_children():
-		if child is Label3D:
-			site_label = child as Label3D
+	site_label = _identity_label
 	refresh_construction()
 
 
 func refresh_construction() -> void:
 	if not is_instance_valid(site_label):
 		return
-	site_label.text = "%s · %d" % [display_name(), owner_id]
+	_refresh_health()
 	for child in get_children():
 		if child is MeshInstance3D and child != selection_indicator and child != rally_indicator:
 			var material := child.material_override as StandardMaterial3D
