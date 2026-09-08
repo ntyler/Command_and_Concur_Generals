@@ -125,6 +125,10 @@ func _physics_process(delta: float) -> void:
 				field.selection.select_building(site.building())
 			return
 	_cooldown -= delta
+	# Interactive HUD motion must not relocate the free preview behind the panel.
+	if field.camera_rig.pointer_over_interface():
+		preview.hide()
+		return
 	var hit := _ground(_pointer)
 	preview.visible = not hit.is_empty() and not field.camera_rig.pointer_over_interface()
 	if not hit.is_empty():

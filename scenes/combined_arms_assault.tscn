@@ -7,3 +7,4 @@
 script = ExtResource("1")
 vehicle_factory_definition = ExtResource("2")
 restart_scene = "res://scenes/combined_arms_assault.tscn"
+tactical_interface_enabled = true

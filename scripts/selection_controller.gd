@@ -31,7 +31,24 @@ func _ready() -> void:
 
 func selected_units() -> Array[RTSUnit]:
 	_prune_selection()
+	if not is_instance_valid(self):
+		return []
 	return _selected.duplicate()
+
+
+func replace_units(candidates: Array) -> void:
+	# Commit all membership before notifying listeners. Callers such as control
+	# groups share the normal ownership checks and never build parallel selection.
+	var accepted: Array[RTSUnit] = []
+	for candidate in candidates:
+		if is_instance_valid(candidate) and candidate is RTSUnit and _can_select(candidate) and not accepted.has(candidate):
+			accepted.append(candidate)
+	cancel_gesture()
+	_pending_picks.clear()
+	_clear()
+	for unit in accepted:
+		_add(unit)
+	selection_changed.emit(_selected.size()) # No writes after synchronous callbacks.
 
 
 func _input(event: InputEvent) -> void:

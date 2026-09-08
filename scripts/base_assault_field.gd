@@ -9,6 +9,9 @@ const ENEMY_BASE := Rect2(16.5, -15, 7, 6)
 @export var barracks_health: float = 450.0
 @export var assault_delay: float = 90.0
 @export_file("*.tscn") var restart_scene: String = "res://scenes/base_assault.tscn"
+@export var tactical_interface_enabled: bool = false
+var tactical_minimap: TacticalMinimap
+var control_groups: ControlGroups
 var enemy_headquarters: RTSBuilding
 var result: Result = Result.RUNNING
 var elapsed: float = 0.0
@@ -69,6 +72,14 @@ func _ready() -> void:
 		controls.text = controls.text.replace("Barracks + right click", "Producer + right click")
 	selection.select_building(headquarters)
 	_update_objective()
+	if tactical_interface_enabled:
+		control_groups = ControlGroups.new()
+		control_groups.field = self
+		add_child(control_groups)
+		tactical_minimap = TacticalMinimap.new()
+		tactical_minimap.field = self
+		tactical_minimap.groups = control_groups
+		get_node("ControlsFeedback").add_child(tactical_minimap)
 
 
 func _physics_process(delta: float) -> void:
@@ -140,6 +151,8 @@ func restart_match() -> bool:
 	if result == Result.RUNNING or _restarting or not is_inside_tree() or is_queued_for_deletion():
 		return false
 	_restarting = true
+	if is_instance_valid(control_groups):
+		control_groups.clear_groups()
 	return get_tree().change_scene_to_file(restart_scene) == OK
 
 

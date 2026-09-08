@@ -52,15 +52,34 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	if not _focused or pointer_over_interface():
+	if not _focused or keyboard_blocked_by_interface():
 		pan_velocity = Vector2.ZERO
 		return
 	var keyboard := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
 	var edge := Vector2.ZERO
-	if edge_scrolling_enabled and _pointer_inside and not gesture_active:
+	if edge_scrolling_enabled and _pointer_inside and not gesture_active and not pointer_over_interface():
 		edge = edge_direction(_pointer, get_viewport().get_visible_rect())
 	var desired := (keyboard * pan_speed + edge * edge_scroll_speed).limit_length(maxf(pan_speed, edge_scroll_speed))
 	advance(delta, desired)
+
+
+func center_on_ground(point: Vector3) -> void:
+	if not point.is_finite():
+		return
+	position.x = clampf(point.x, map_bounds.position.x, map_bounds.end.x)
+	position.z = clampf(point.z, map_bounds.position.y, map_bounds.end.y)
+	pan_velocity = Vector2.ZERO
+
+
+func keyboard_blocked_by_interface() -> bool:
+	if get_viewport().gui_get_focus_owner() != null:
+		return true
+	var hovered := get_viewport().gui_get_hovered_control()
+	while hovered != null:
+		if hovered.mouse_filter == Control.MOUSE_FILTER_STOP:
+			return not hovered.get_meta("pointer_only_camera_block", false)
+		hovered = hovered.get_parent_control()
+	return false
 
 
 func advance(delta: float, desired_velocity: Vector2) -> void:

@@ -26,6 +26,15 @@ selection_modifier={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keyc
 cancel_selection={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194305)]}
 movement_debug={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194334)]}
 unit_stop={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":88)]}
+control_group_1={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":49)]}
+control_group_2={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":50)]}
+control_group_3={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":51)]}
+control_group_4={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":52)]}
+control_group_5={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":53)]}
+control_group_6={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":54)]}
+control_group_7={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":55)]}
+control_group_8={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":56)]}
+control_group_9={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":57)]}
 placement_confirm={"deadzone":0.2,"events":[Object(InputEventMouseButton,"button_index":1)]}
 placement_cancel={"deadzone":0.2,"events":[Object(InputEventMouseButton,"button_index":2),Object(InputEventKey,"physical_keycode":4194305)]}
 

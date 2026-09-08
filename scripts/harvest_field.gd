@@ -99,6 +99,15 @@ func _cache_exiting(id: int) -> void:
 	_release_target(id)
 
 
+func registered_caches() -> Array[SupplyCache]:
+	var members: Array[SupplyCache] = []
+	for entry in _caches.values():
+		var cache := (entry as WeakRef).get_ref() as SupplyCache
+		if is_instance_valid(cache) and contains_cache(cache):
+			members.append(cache)
+	return members
+
+
 func _release_target(id: int) -> void:
 	_access_claims.erase(id)
 

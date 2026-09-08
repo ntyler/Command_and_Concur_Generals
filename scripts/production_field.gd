@@ -111,6 +111,15 @@ func register_building(building: RTSBuilding) -> void:
 		building.tree_entered.connect(register_building.bind(building))
 
 
+func registered_buildings() -> Array[RTSBuilding]:
+	var members: Array[RTSBuilding] = []
+	for entry in _buildings.values():
+		var building := (entry as WeakRef).get_ref() as RTSBuilding
+		if is_instance_valid(building) and contains_building(building):
+			members.append(building)
+	return members
+
+
 func _building_exiting(id: int) -> void:
 	# tree_exiting also occurs during reparent. Decide after that operation finishes;
 	# the field retains only weak node refs and the small refund-capable queue.
