@@ -71,6 +71,8 @@ Milestone 7 adds **Build Vehicle Factory** alongside **Build Barracks** at the H
 
 Start with the same 1000 credits, collectors, supplies and small force, with neither production building. Harvest to fund both structures and their units, then attack the coral HQ while protecting yours. The original 90-second enemy assault, victory/defeat/draw and Restart remain. Restart reloads this combined-arms scene with clean initial state. Earlier scenes, including the original base assault, retain their defaults. See [Milestone 7](docs/milestone-7.md) for exact configuration, automated acceptance and preserved deferred movement limitations.
 
+Milestone 7 feature validation passes **225 headless / 230 graphical assertions**, including the zero-credit earned construction/production/combat/victory/Restart loop. The latest requested verification passes fresh-copy import and **44/44 test executions: 5555 assertions, zero failures**, including Base Assault and the complete ordinary regression matrix. Earlier runs retain two graphical movement-stress failures (unit 5, 50-unit gate arrival/settling) and three headless projection-fixture failures. Their attribution remains unknown; this passing run does not resolve them or establish full movement acceptance. [The completed report](docs/milestone-7.md#repeated-request-verification) includes exact commands, results and captured frames. No human playtest was performed.
+
 ## Controls
 
 | Input | Behavior |
@@ -217,6 +219,10 @@ From the repository root in **PowerShell 7**, with `$godot` set as above, use th
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/harvesting_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/construction_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/construction_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/base_assault_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/base_assault_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/vehicle_production_checks.gd')
+& .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--path', '.', '--fixed-fps', '60', '--script', 'res://tests/vehicle_production_checks.gd')
 & .\tools\run-godot.ps1 -GodotPath $godot -GodotArguments @('--headless', '--path', '.', '--fixed-fps', '60', '--script', 'res://tests/combat_checks.gd', '--', '--combat-load')
 & .\tests\validation_wrapper_checks.ps1 -GodotPath $godot
 git diff --check
@@ -241,6 +247,6 @@ See [Milestone 2.5.1 spherical collision and current acceptance evidence](docs/m
 - Assignment reduces straight-line travel; it does not solve a global minimum-cost path assignment around obstacles.
 - Weapon obstruction supports marked static primitive convex shapes and swept spherical rockets. Moving blockers, arbitrary concave meshes, bouncing and projectile pathfinding are outside the tested scope. Other units do not intercept shots.
 - Combat has no visibility filtering, cover bonuses, automatic repositioning, splash damage, armor multipliers or attack-move.
-- Production, harvesting and construction demonstrations remain available separately; base assault integrates them and adds damage/destruction for HQs and completed barracks. No builders, building repair/capture/sale, power, technology, collector or other vehicle production, resource regeneration, trading, cargo drops, fog of war, strategic AI or multiplayer are implemented. All visuals are original generated primitives.
+- Production, harvesting and construction demonstrations remain available separately; base assault integrates them and adds damage/destruction for HQs and completed production buildings. Combined arms adds the Vehicle Factory and existing Rocket Vehicle recipe. No builders, building repair/capture/sale, power, technology, collector production, additional unit recipes, resource regeneration, trading, cargo drops, fog of war, strategic AI or multiplayer are implemented. All visuals are original generated primitives.
 
 Physical-input construction/harvesting/production/combat playtesting, opposing traffic and varied terrain remain separate work. Production is limited to flat geometry, normal simulation timing and a small local exit search; harvesting has eight local access slots per target and can fail safely under permanent obstruction. Neither physics lockstep determinism nor universal frame-rate behavior is claimed.
