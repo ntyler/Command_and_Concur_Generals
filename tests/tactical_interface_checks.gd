@@ -5,6 +5,10 @@ extends "res://tests/vehicle_production_checks.gd"
 
 
 func _run() -> void:
+	# Exercise actual requested client dimensions instead of the project's legacy
+	# 1280x800 aspect-preserving stretch viewport inside a resized native window.
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	root.content_scale_size = Vector2i.ZERO
 	root.size = Vector2i(1280, 720)
 	var logger := EngineErrorProbe.new()
 	OS.add_logger(logger)
