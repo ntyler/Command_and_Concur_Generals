@@ -60,7 +60,7 @@ func begin(source: Variant, choice: ConstructionDefinition = null) -> bool:
 	definition = requested
 	(preview.mesh as BoxMesh).size = Vector3(definition.footprint.x, definition.height, definition.footprint.y)
 	range_indicator.hide()
-	if definition.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY and definition.weapon_data != null:
+	if definition.kind in [RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY] and definition.weapon_data != null:
 		var ring := TorusMesh.new()
 		ring.inner_radius = maxf(0.0, definition.weapon_data.attack_range - 0.06)
 		ring.outer_radius = definition.weapon_data.attack_range + 0.06
@@ -161,7 +161,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var hit := _ground(_pointer)
 	preview.visible = not hit.is_empty() and not field.camera_rig.pointer_over_interface()
-	range_indicator.visible = preview.visible and definition.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY
+	range_indicator.visible = preview.visible and definition.kind in [RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]
 	if not hit.is_empty():
 		point = hit["position"]
 		preview.position = point + Vector3.UP * definition.height / 2.0

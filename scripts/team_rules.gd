@@ -2,6 +2,8 @@ class_name TeamRules
 extends RefCounted
 ## owner_id is the existing integer team identity; no parallel ownership property.
 
+enum TargetDomain { GROUND, AIR }
+
 
 static func is_controlled(field: TestField, unit: RTSUnit, local_team: int) -> bool:
 	return is_instance_valid(field) and field.contains_unit(unit) and unit.owner_id == local_team
@@ -29,14 +31,27 @@ static func is_hostile_target(field: TestField, source_team: int, target: Varian
 
 
 static func is_hostile_ground_unit(field: TestField, source_team: int, target: Variant) -> bool:
-	# Every currently implemented mobile combat/damageable actor is ground-based.
-	# Registry membership excludes previews, caches, buildings and decoration.
-	return target is RTSUnit and is_hostile_target(field, source_team, target)
+	return target is RTSUnit and target_domain(target) == TargetDomain.GROUND and is_hostile_target(field, source_team, target)
+
+
+static func target_domain(target: Variant) -> TargetDomain:
+	# The deployed gameplay body determines its domain, including a safe climb.
+	# Existing mobile actors and every building keep the ground default.
+	if is_instance_valid(target) and target is RTSUnit and target.has_method("is_airborne_unit") and bool(target.call("is_airborne_unit")):
+		return TargetDomain.AIR
+	return TargetDomain.GROUND
+
+
+static func weapon_can_target(field: TestField, source_team: int, target: Variant, domain: int = TargetDomain.GROUND, ground_mobile_only: bool = false) -> bool:
+	return is_hostile_target(field, source_team, target) and target_domain(target) == domain and (not ground_mobile_only or target is RTSUnit)
 
 
 static func can_attack(field: TestField, source: Node3D, target: Variant, notify_power: bool = true) -> bool:
 	if source is RTSUnit:
-		return is_combat_member(field, source) and is_instance_valid(source.combat.weapon) and is_hostile_target(field, source.owner_id, target)
+		if not is_combat_member(field, source) or not is_instance_valid(source.combat.weapon):
+			return false
+		var data: WeaponDefinition = source.combat.weapon.definition
+		return data != null and data.is_valid() and weapon_can_target(field, source.owner_id, target, data.target_domain, data.ground_mobile_only)
 	if source is GroundDefenseBattery:
 		# Reading current power can notify listeners that remove/change either actor.
 		return source.source_authorized(notify_power) and is_instance_valid(source) and source.gameplay_field == field and source.target_available(target)

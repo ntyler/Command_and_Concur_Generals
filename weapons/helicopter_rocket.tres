@@ -4,10 +4,13 @@
 
 [resource]
 script = ExtResource("1")
-display_name = "Ground Defense Battery"
-mode = 0
-ground_mobile_only = true
-damage = 18.0
+display_name = "Attack Helicopter"
+mode = 1
+target_domain = 0
+damage = 24.0
 attack_range = 12.0
-cooldown = 0.75
+cooldown = 1.5
 facing_tolerance_degrees = 8.0
+projectile_speed = 12.0
+projectile_lifetime = 6.0
+projectile_collision_radius = 0.1

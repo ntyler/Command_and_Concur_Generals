@@ -30,13 +30,13 @@ func try_fire(target: Variant) -> bool:
 		return false
 	if not _same_source(source, field, source_owner, version):
 		return false
-	if (source is RTSUnit and source.moving) or cooldown_remaining > 0.000001 or source.global_position.distance_to(target.global_position) > definition.attack_range:
+	if not _motion_allows_fire(source) or cooldown_remaining > 0.000001 or source.global_position.distance_to(target.global_position) > definition.attack_range:
 		return false
 	if source.facing_error(target.global_position) > deg_to_rad(definition.facing_tolerance_degrees):
 		return false
 	var query_origin := LineOfFire.muzzle(source)
 	var query_aim := LineOfFire.aim(target)
-	var query_attachment: Vector3 = source.weapon_attachment() if source is GroundDefenseBattery else source.global_position + Vector3.UP * LineOfFire.BODY_HEIGHT
+	var query_attachment := LineOfFire.attachment(source)
 	var line := field.fire_query.weapon_clearance(source, target, definition)
 	if not is_instance_valid(self):
 		return false
@@ -47,11 +47,11 @@ func try_fire(target: Variant) -> bool:
 	# Cached controller eligibility never authorizes damage at this boundary.
 	if not _same_source(source, field, source_owner, version) or not TeamRules.can_attack(field, source, target, false) or not is_instance_valid(self):
 		return false
-	if not _same_source(source, field, source_owner, version) or definition != shot_definition or not is_instance_valid(target) or (source is RTSUnit and source.moving) or cooldown_remaining > 0.000001 or source.global_position.distance_to(target.global_position) > definition.attack_range or source.facing_error(target.global_position) > deg_to_rad(definition.facing_tolerance_degrees):
+	if not _same_source(source, field, source_owner, version) or definition != shot_definition or not is_instance_valid(target) or not _motion_allows_fire(source) or cooldown_remaining > 0.000001 or source.global_position.distance_to(target.global_position) > definition.attack_range or source.facing_error(target.global_position) > deg_to_rad(definition.facing_tolerance_degrees):
 		return false
 	var muzzle := LineOfFire.muzzle(source)
 	var aim := LineOfFire.aim(target)
-	var attachment: Vector3 = source.weapon_attachment() if source is GroundDefenseBattery else source.global_position + Vector3.UP * LineOfFire.BODY_HEIGHT
+	var attachment := LineOfFire.attachment(source)
 	if muzzle != query_origin or aim != query_aim or attachment != query_attachment:
 		return false # Geometry changed during a callback; next tick queries afresh.
 	# No notifications between the final validated boundary and commitment.
@@ -72,11 +72,20 @@ func try_fire(target: Variant) -> bool:
 		if not is_instance_valid(self):
 			return true
 		if is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion():
-			CombatFeedback.world_tracer(field, muzzle, aim)
+			if shot_definition.target_domain == TeamRules.TargetDomain.AIR:
+				CombatFeedback.world_tracer(field, muzzle, aim, Color("99ddff"), 0.08)
+			else:
+				CombatFeedback.world_tracer(field, muzzle, aim)
 		if not is_instance_valid(self):
 			return true
 	fired.emit(target if is_instance_valid(target) else null, projectile)
 	return true
+
+
+func _motion_allows_fire(source: Node3D) -> bool:
+	if source is RTSUnit and source.moving:
+		return false
+	return not source.has_method("can_fire_weapon") or bool(source.call("can_fire_weapon"))
 
 
 func _same_source(source: Node3D, field: TestField, owner: int, version: int) -> bool:

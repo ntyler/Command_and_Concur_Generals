@@ -31,5 +31,8 @@ func refresh_construction() -> void:
 					material.albedo_color = Color("dfbc70") if child.position.y > building_height else Color("477a69")
 				elif kind == Kind.POWER_PLANT:
 					material.albedo_color = Color("f4d779") if child.position.y > building_height * 0.55 else Color("566b91")
+				elif kind == Kind.AIRFIELD:
+					# Preserve the pad's H and dark launch surface after completion.
+					material.albedo_color = Color("8de9ef") if child.position.y > building_height + 0.15 else (Color("243e53") if child.position.y > building_height else Color("547c83"))
 				else:
 					material.albedo_color = Color("547c83")

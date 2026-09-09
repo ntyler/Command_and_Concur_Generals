@@ -9,6 +9,8 @@ const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -
 @export var supply_depot_definition: ConstructionDefinition
 @export var power_plant_definition: ConstructionDefinition
 @export var defense_definition: ConstructionDefinition
+@export var airfield_definition: ConstructionDefinition
+@export var air_defense_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
 @export var builder_construction_enabled: bool = false
 @export_range(0.85, 2.0, 0.05) var builder_work_distance: float = 1.3
@@ -96,14 +98,14 @@ func valid_rally(origin: Vector3, point: Vector3) -> bool:
 	return (construction == null or not construction.navigation.blocked) and super.valid_rally(origin, point)
 
 
-func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVector3Array:
-	if construction.navigation.blocked:
+func find_spawn(building: RTSBuilding, body: Shape3D = null) -> PackedVector3Array:
+	if construction.navigation.blocked and building.kind != RTSBuilding.Kind.AIRFIELD:
 		return PackedVector3Array()
 	return super.find_spawn(building, body)
 
 
 func supports_construction(definition: ConstructionDefinition) -> bool:
-	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition or definition == power_plant_definition or (builder_construction_enabled and power_enabled and definition == defense_definition))
+	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition or definition == power_plant_definition or (builder_construction_enabled and power_enabled and definition in [defense_definition, airfield_definition, air_defense_definition]))
 
 
 func builder_work_positions(rectangle: Rect2) -> Array[Dictionary]:
@@ -184,7 +186,7 @@ func protected_areas() -> Array[Rect2]:
 		if site.state in [ConstructionSite.State.CANCELLING, ConstructionSite.State.CANCELLED]:
 			continue
 		var body: RTSBuilding = site.building()
-		if is_instance_valid(body) and body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY]:
+		if is_instance_valid(body) and body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
 			continue # Generators and defenses need builder access, but no deployment exit.
 		# Protect the entire fixed six-sample exit neighborhood, plus the link from
 		# the door. This is geometry protection, not a center-point test.
@@ -220,7 +222,7 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 		if clear.intersects(protected, true):
 			return "Protected deposit, supply, exit or access corridor"
 	# Fixed generators and defenses have no production exit.
-	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY]:
+	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
 		var exit_rectangle := exit_area(rectangle)
 		if not BUILD_AREA.encloses(exit_rectangle):
 			return "%s exit must fit inside the construction area" % definition.display_name()
@@ -249,7 +251,7 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 	# Explicit live-unit bounds also cover a unit registered earlier in this tick,
 	# before its new physics body has reached the broad phase.
 	for unit in units:
-		if contains_unit(unit) and clear.grow(RTSUnit.BODY_RADIUS).has_point(Vector2(unit.global_position.x, unit.global_position.z)):
+		if contains_unit(unit) and unit.global_position.y < definition.height + 0.6 and clear.grow(RTSUnit.BODY_RADIUS).has_point(Vector2(unit.global_position.x, unit.global_position.z)):
 			return "A unit occupies the footprint clearance"
 	return ""
 

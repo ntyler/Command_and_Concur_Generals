@@ -11,7 +11,7 @@ class Job extends RefCounted:
 	var payer: int
 	var paid: int
 	var scene: PackedScene
-	var body: CapsuleShape3D
+	var body: Shape3D
 	var label: String
 	var duration: float
 	var elapsed: float = 0.0
@@ -119,7 +119,7 @@ func set_rally(requester: int, point: Vector3) -> ProductionResult:
 	if requester != producer.owner_id:
 		return ProductionResult.reject("Producer not controlled")
 	var field := _field_ref.get_ref() as ProductionField
-	if not field.valid_rally(producer.exit_position(), point):
+	if not field.valid_producer_rally(producer, point):
 		return ProductionResult.reject("Invalid rally point")
 	has_rally = true
 	rally_point = point
@@ -163,7 +163,7 @@ func _advance_head(delta: float) -> void:
 	if candidate.is_empty():
 		_set_message("Exit blocked")
 		return
-	var unit := field.prepare_deployment(job.scene, job.payer, candidate[0])
+	var unit := field.prepare_deployment(job.scene, job.payer, candidate[0], building())
 	# add_child/registration can invoke external tree callbacks. No paid unit may
 	# escape if cancellation/removal won before this point.
 	if not _still_head(job) or not is_instance_valid(unit) or not is_instance_valid(field) or not field.contains_unit(unit):
@@ -182,11 +182,18 @@ func _advance_head(delta: float) -> void:
 	# rally, UI or completion notifications can call back. No refund after here.
 	_jobs.pop_front()
 	message = ""
+	var deployment_order := unit.order_version
 	unit.show()
 	# Visibility callbacks may remove the just-committed unit as well.
 	var rally_ok := not use_rally
-	if use_rally and is_instance_valid(unit) and is_instance_valid(field):
+	var rally_superseded := false
+	if use_rally and is_instance_valid(unit) and is_instance_valid(field) and unit.order_version == deployment_order:
 		rally_ok = field.order_deployed_unit(unit, destination)
+	elif is_instance_valid(unit) and unit.order_version != deployment_order:
+		rally_superseded = true
+		rally_ok = true # A visibility callback supplied a newer player command.
+	if not rally_superseded and is_instance_valid(unit) and is_instance_valid(field) and is_instance_valid(building()):
+		field.follow_deployment_rally(unit, building(), deployment_order + (1 if use_rally and rally_ok else 0))
 	last_deployment = {"job_id": job.id, "unit_id": identity, "rally": destination, "rally_accepted": rally_ok}
 	if not rally_ok:
 		message = "Deployed; rally rejected (unit idle)"

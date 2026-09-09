@@ -1,0 +1,12 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/defense_assault.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/air_assault_field.gd" id="2"]
+[ext_resource type="Resource" path="res://construction/airfield.tres" id="3"]
+[ext_resource type="Resource" path="res://construction/air_defense_battery.tres" id="4"]
+
+[node name="AirAssault" instance=ExtResource("1")]
+script = ExtResource("2")
+airfield_definition = ExtResource("3")
+air_defense_definition = ExtResource("4")
+restart_scene = "res://scenes/air_assault.tscn"

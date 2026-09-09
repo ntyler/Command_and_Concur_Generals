@@ -175,9 +175,16 @@ func issue_attack(target: Variant) -> CommandBatchResult:
 	var selected := _batch_selection(result)
 	if result.superseded or selected.is_empty():
 		return result
+	var eligible := false
 	for unit in selected:
-		if not TeamRules.can_attack(self, unit, target) or not unit.combat.weapon.definition.is_valid():
+		# Malformed armed members still reject the batch atomically. Valid weapons
+		# with a different target domain simply retain their previous orders.
+		if is_instance_valid(unit.combat) and is_instance_valid(unit.combat.weapon) and (unit.combat.weapon.definition == null or not unit.combat.weapon.definition.is_valid()):
 			return result
+		if TeamRules.can_attack(self, unit, target):
+			eligible = true
+	if not eligible:
+		return result
 	_command_version = result.generation
 	for i in selected.size():
 		if result.generation != _command_version:
@@ -185,7 +192,7 @@ func issue_attack(target: Variant) -> CommandBatchResult:
 		var unit := selected[i]
 		# A previous member's callback may have freed either reference. Check
 		# validity before passing it into a typed method or reading its identity.
-		if not is_instance_valid(unit) or not contains_unit(unit) or not is_instance_valid(target):
+		if not is_instance_valid(unit) or not contains_unit(unit) or not is_instance_valid(target) or not TeamRules.can_attack(self, unit, target):
 			continue
 		if unit.combat.issue_attack(target):
 			result.accepted_ids.append(result.intended_ids[i])
@@ -214,25 +221,10 @@ func issue_move(clicked: Vector3) -> CommandBatchResult:
 		return result
 	selected.sort_custom(func(a: RTSUnit, b: RTSUnit) -> bool: return a.unit_id < b.unit_id)
 	result.intended_ids.sort()
-	var map := get_world_3d().get_navigation_map()
-	var selected_ids: Dictionary[int, bool] = {}
-	for unit in selected:
-		selected_ids[unit.unit_id] = true
-	var reserved := PackedVector3Array()
-	for unit in units:
-		if contains_unit(unit) and not selected_ids.has(unit.unit_id):
-			reserved.append(_reserved_command_destination(unit))
-	var slots := destinations.generate_slots(map, clicked, selected.size(), reserved)
-	if slots.size() != selected.size():
+	var assigned := _movement_assignments(selected, clicked)
+	if assigned.size() != selected.size():
 		status_label.text = "%02d selected  /  No room for destinations" % selected.size()
 		return result
-	var assigned := destinations.assign_slots(selected, slots)
-	# Reject an unreachable command atomically; keep the previous order intact.
-	for i in selected.size():
-		var path := NavigationServer3D.map_get_path(map, selected[i].global_position, assigned[i], true)
-		if path.is_empty() or path[path.size() - 1].distance_to(assigned[i]) > 0.1:
-			status_label.text = "%02d selected  /  Destination unreachable" % selected.size()
-			return result
 	_command_version = result.generation
 	for i in selected.size():
 		if result.generation != _command_version:
@@ -249,6 +241,73 @@ func issue_move(clicked: Vector3) -> CommandBatchResult:
 		for id in result.accepted_ids:
 			last_command_slots.append(result.assignments[id])
 	return _finish_batch(result, "Move order")
+
+
+func _movement_assignments(selected: Array[RTSUnit], clicked: Vector3, strict_ground: bool = false) -> PackedVector3Array:
+	# One batch retains authority; each locomotion domain validates its own slots.
+	# Ground-only calls keep the original generator, spacing and path checks.
+	if not clicked.is_finite():
+		return PackedVector3Array()
+	var map := get_world_3d().get_navigation_map()
+	var assigned := PackedVector3Array()
+	assigned.resize(selected.size())
+	for domain in [TeamRules.TargetDomain.GROUND, TeamRules.TargetDomain.AIR]:
+		var members: Array[RTSUnit] = []
+		var indices: Array[int] = []
+		for index in selected.size():
+			if TeamRules.target_domain(selected[index]) == domain:
+				members.append(selected[index])
+				indices.append(index)
+		if members.is_empty():
+			continue
+		var reserved := PackedVector3Array()
+		for unit in units:
+			if contains_unit(unit) and not members.has(unit) and TeamRules.target_domain(unit) == domain:
+				reserved.append(_reserved_command_destination(unit))
+		var slots := PackedVector3Array()
+		if domain == TeamRules.TargetDomain.AIR:
+			slots = _flight_slots(members, clicked, reserved)
+		else:
+			if strict_ground:
+				if NavigationServer3D.map_get_iteration_id(map) == 0 or NavigationServer3D.map_get_closest_point(map, clicked).distance_to(clicked) > 0.1 or NavigationServer3D.map_get_closest_point_owner(map, clicked) != navigation_region.get_rid():
+					return PackedVector3Array()
+				for member in members:
+					if member.navigation_suspended:
+						return PackedVector3Array()
+			slots = destinations.generate_slots(map, clicked, members.size(), reserved)
+		if slots.size() != members.size():
+			return PackedVector3Array()
+		var domain_assignments := destinations.assign_slots(members, slots)
+		for index in members.size():
+			if domain == TeamRules.TargetDomain.GROUND:
+				var path := NavigationServer3D.map_get_path(map, members[index].global_position, domain_assignments[index], true)
+				if path.is_empty() or path[path.size() - 1].distance_to(domain_assignments[index]) > 0.1:
+					return PackedVector3Array()
+			assigned[indices[index]] = domain_assignments[index]
+	return assigned
+
+
+func _flight_slots(members: Array[RTSUnit], clicked: Vector3, reserved: PackedVector3Array) -> PackedVector3Array:
+	var slots := PackedVector3Array()
+	var offsets: Array[Vector2i] = []
+	for x in range(-8, 9):
+		for z in range(-8, 9):
+			offsets.append(Vector2i(x, z))
+	offsets.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		if a.length_squared() != b.length_squared(): return a.length_squared() < b.length_squared()
+		return a.x < b.x or (a.x == b.x and a.y < b.y))
+	for offset in offsets:
+		var candidate: Vector3 = members[0].call("flight_destination", clicked + Vector3(offset.x * 1.5, 0, offset.y * 1.5))
+		var clear := true
+		for point in reserved:
+			if candidate.distance_to(point) < 1.499: clear = false; break
+		for point in slots:
+			if candidate.distance_to(point) < 1.499: clear = false; break
+		if not clear or not bool(members[0].call("flight_destination_valid", candidate)):
+			continue
+		slots.append(candidate)
+		if slots.size() == members.size(): return slots
+	return PackedVector3Array()
 
 
 func _attack_move_context_active() -> bool:
@@ -350,40 +409,20 @@ func _dispatch_attack_move(result: CommandBatchResult, selected: Array[RTSUnit],
 		if is_instance_valid(unit) and can_attack_move_for(owner, unit):
 			participating.append(unit)
 	if participating.is_empty():
-		_owner_feedback(owner, "Attack Move rejected · select a Rifle or Rocket Vehicle")
+		_owner_feedback(owner, "Attack Move rejected · select an armed mobile unit")
 		return result
 	participating.sort_custom(func(a: RTSUnit, b: RTSUnit) -> bool: return a.unit_id < b.unit_id)
 	result.intended_ids.sort()
-	var map := get_world_3d().get_navigation_map()
-	if not clicked.is_finite() or not field_bounds.has_point(Vector2(clicked.x, clicked.z)) or NavigationServer3D.map_get_iteration_id(map) == 0:
+	if not clicked.is_finite() or not field_bounds.has_point(Vector2(clicked.x, clicked.z)):
 		_owner_feedback(owner, "Attack Move rejected · choose navigable ground")
 		return result
-	var projected := NavigationServer3D.map_get_closest_point(map, clicked)
-	if projected.distance_to(clicked) > 0.1 or NavigationServer3D.map_get_closest_point_owner(map, clicked) != navigation_region.get_rid():
-		_owner_feedback(owner, "Attack Move rejected · choose navigable ground")
-		return result
-	var participating_ids: Dictionary[int, bool] = {}
-	for unit in participating:
-		if unit.navigation_suspended:
-			_owner_feedback(owner, "Attack Move rejected · navigation is updating")
-			return result
-		participating_ids[unit.unit_id] = true
-	var reserved := PackedVector3Array()
-	for unit in units:
-		if contains_unit(unit) and not participating_ids.has(unit.unit_id):
-			reserved.append(_reserved_command_destination(unit))
-	var slots := destinations.generate_slots(map, clicked, participating.size(), reserved)
-	if slots.size() != participating.size():
+	var assigned := _movement_assignments(participating, clicked, true)
+	if assigned.size() != participating.size():
 		_owner_feedback(owner, "Attack Move rejected · no room for destinations")
 		return result
-	var assigned := destinations.assign_slots(participating, slots)
 	var identities: Array[int] = []
 	for i in participating.size():
 		var unit := participating[i]
-		var path := NavigationServer3D.map_get_path(map, unit.global_position, assigned[i], true)
-		if path.is_empty() or path[path.size() - 1].distance_to(assigned[i]) > 0.1:
-			_owner_feedback(owner, "Attack Move rejected · destination unreachable")
-			return result
 		identities.append(unit.unit_id)
 	# Validation above changes no orders; acceptance follows existing batch authority.
 	_commit_owner_command(owner, result.generation)

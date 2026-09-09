@@ -56,13 +56,21 @@ static func target_exclusions(target: Node3D) -> Array[RID]:
 
 
 static func muzzle(unit: Node3D) -> Vector3:
-	if unit is GroundDefenseBattery:
-		return unit.weapon_origin()
+	if unit.has_method("weapon_origin"):
+		return unit.call("weapon_origin")
 	return unit.global_position + Vector3.UP * MUZZLE_HEIGHT
 
 
 static func aim(unit: Node3D) -> Vector3:
+	if unit.has_method("aim_position"):
+		return unit.call("aim_position")
 	return unit.global_position + Vector3.UP * AIM_HEIGHT
+
+
+static func attachment(unit: Node3D) -> Vector3:
+	if unit.has_method("weapon_attachment"):
+		return unit.call("weapon_attachment")
+	return unit.global_position + Vector3.UP * BODY_HEIGHT
 
 
 func weapon_clearance(source: Node3D, target: Node3D, definition: WeaponDefinition) -> Trace:
@@ -81,12 +89,11 @@ func firing_line(source: Node3D, target: Node3D) -> Trace:
 	# The centerline muzzle stays within the body footprint. Also validate the
 	# short vertical attachment so geometry between body and muzzle cannot bypass.
 	var exclusions: Array[RID] = []
-	var attachment_start := source.global_position + Vector3.UP * BODY_HEIGHT
+	var attachment_start := attachment(source)
 	if source is GroundDefenseBattery:
 		# The committed stationary footprint is still a blocker to every other
 		# weapon. Only its own attachment/shot excludes its own collision RID.
 		exclusions.append(source.get_rid())
-		attachment_start = source.weapon_attachment()
 	var attachment := segment(world, attachment_start, muzzle(source), exclusions)
 	if not attachment.is_clear():
 		return attachment

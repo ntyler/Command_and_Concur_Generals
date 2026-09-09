@@ -233,7 +233,7 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 		return ConstructionResult.reject("Insufficient credits")
 	sites[site.site_id] = site
 	unfinished_id = site.site_id
-	var body: ConstructionBuilding = GroundDefenseBattery.new() if definition.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY else ConstructionBuilding.new()
+	var body: ConstructionBuilding = GroundDefenseBattery.new() if definition.kind in [RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY] else ConstructionBuilding.new()
 	body.site = site
 	body.operational = false
 	body.owner_id = requester
@@ -242,7 +242,9 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 	body.recipe = load("res://production/rocket_vehicle.tres") if body.kind == RTSBuilding.Kind.VEHICLE_FACTORY else load("res://production/rifle.tres")
 	if body.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
 		body.recipe = load("res://production/collector_truck.tres")
-	elif body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY]:
+	elif body.kind == RTSBuilding.Kind.AIRFIELD:
+		body.recipe = load("res://production/attack_helicopter.tres")
+	elif body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
 		body.recipe = null
 	body.footprint = definition.footprint
 	body.building_height = definition.height
@@ -355,7 +357,7 @@ func advance(delta: float) -> void:
 	unfinished_id = 0
 	body.operational = true
 	var rally := body.exit_position() + Vector3.RIGHT * 3.0
-	if body.production != null and field().valid_rally(body.exit_position(), rally):
+	if body.production != null and field().valid_producer_rally(body, rally):
 		body.production.has_rally = true
 		body.production.rally_point = rally
 	(body as ConstructionBuilding).refresh_construction()

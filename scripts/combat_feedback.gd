@@ -85,14 +85,14 @@ func show_tracer(muzzle: Vector3, aim: Vector3) -> void:
 	world_tracer(unit.gameplay_field, muzzle, aim)
 
 
-static func world_tracer(field: TestField, muzzle: Vector3, aim: Vector3) -> void:
+static func world_tracer(field: TestField, muzzle: Vector3, aim: Vector3, color: Color = Color("fff0a0"), width: float = 0.045) -> void:
 	var trace := MeshInstance3D.new()
 	trace.add_to_group("combat_tracers")
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.045, 0.045, muzzle.distance_to(aim))
+	mesh.size = Vector3(width, width, muzzle.distance_to(aim))
 	trace.mesh = mesh
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("fff0a0")
+	material.albedo_color = color
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	trace.material_override = material
 	field.add_child(trace)

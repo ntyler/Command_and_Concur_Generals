@@ -2,7 +2,7 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT, GROUND_DEFENSE_BATTERY }
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT, GROUND_DEFENSE_BATTERY, AIRFIELD, AIR_DEFENSE_BATTERY }
 @export var owner_id: int = 1:
 	set(value):
 		if owner_id == value:
@@ -44,6 +44,10 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.AIRFIELD:
+		return "Airfield"
+	if kind == Kind.AIR_DEFENSE_BATTERY:
+		return "Air Defense Battery"
 	if kind == Kind.GROUND_DEFENSE_BATTERY:
 		return "Ground Defense Battery"
 	if kind == Kind.POWER_PLANT:
@@ -56,7 +60,7 @@ func display_name() -> String:
 
 
 func supports_recipe(definition: ProductionDefinition) -> bool:
-	return definition != null and ((kind == Kind.HEADQUARTERS and definition.identifier == &"bulldozer") or (kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle") or (kind == Kind.SUPPLY_DEPOT and definition.identifier == &"collector_truck"))
+	return definition != null and ((kind == Kind.HEADQUARTERS and definition.identifier == &"bulldozer") or (kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle") or (kind == Kind.SUPPLY_DEPOT and definition.identifier == &"collector_truck") or (kind == Kind.AIRFIELD and definition.identifier == &"attack_helicopter"))
 
 
 func is_drop_off() -> bool:
@@ -114,6 +118,12 @@ func _ready() -> void:
 			for z in [-0.85, 0.0, 0.85]:
 				_mesh(Vector3(1.5, 0.12, 0.22), Vector3(x, building_height + 0.56, z), Color("fff0b0"))
 		_mesh(Vector3(4.5, 0.25, 0.3), Vector3(0, building_height + 0.78, 0), Color("edc45f"))
+	elif kind == Kind.AIRFIELD:
+		# Flat visible pad; all raised trim is outside the central launch sphere.
+		_mesh(Vector3(4.4, 0.025, 3.6), Vector3(0, building_height + 0.135, 0), Color("243e53"))
+		for x in [-0.7, 0.7]:
+			_mesh(Vector3(0.18, 0.02, 1.7), Vector3(x, building_height + 0.16, 0), Color("8de9ef"))
+		_mesh(Vector3(1.4, 0.02, 0.18), Vector3(0, building_height + 0.16, 0), Color("8de9ef"))
 	var label := Label3D.new()
 	_identity_label = label
 	label.text = "%s · %d" % [display_name(), owner_id]
@@ -239,6 +249,11 @@ func _exit_tree() -> void:
 
 func exit_position() -> Vector3:
 	return global_position + Vector3(footprint.x / 2.0 + 1.3, 0, 0)
+
+
+func launch_position(radius: float = 0.5) -> Vector3:
+	# Aircraft origin is its collision sphere center, above the visible pad.
+	return global_position + Vector3.UP * (building_height + radius + 0.18)
 
 
 func _mesh(size: Vector3, offset: Vector3, color: Color) -> MeshInstance3D:

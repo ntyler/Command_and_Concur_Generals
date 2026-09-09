@@ -1,9 +1,10 @@
 class_name GroundDefenseBattery
 extends ConstructionBuilding
-## Stationary construction body; only its turret faces the current ground threat.
+## Shared stationary defense body; weapon data chooses ground or air threats.
 ## The existing emitter owns every shot, cooldown and authoritative damage check.
 
 const RANGE_COLOR := Color("ffce78")
+const AIR_RANGE_COLOR := Color("99ddff")
 
 signal status_changed
 
@@ -40,9 +41,15 @@ func _ready() -> void:
 	turret.name = "Turret"
 	turret.position.y = building_height + 0.42
 	add_child(turret)
-	_turret_box(Vector3(2.2, 0.65, 1.8), Vector3.ZERO, Color("263c49"))
-	_turret_box(Vector3(1.65, 0.14, 1.35), Vector3(0, 0.39, 0), Color("ffce78"))
-	_turret_box(Vector3(0.35, 0.28, 1.45), Vector3(0, 0.15, -1.18), Color("b2d0c0"))
+	if _air_defense():
+		_turret_box(Vector3(1.5, 0.75, 1.5), Vector3.ZERO, Color("34446b"))
+		_turret_box(Vector3(1.8, 0.16, 1.2), Vector3(0, 0.46, 0), AIR_RANGE_COLOR)
+		for side in [-1.0, 1.0]:
+			_turret_box(Vector3(0.28, 0.3, 1.8), Vector3(side * 0.58, 0.12, -1.1), Color("c7e8ff"))
+	else:
+		_turret_box(Vector3(2.2, 0.65, 1.8), Vector3.ZERO, Color("263c49"))
+		_turret_box(Vector3(1.65, 0.14, 1.35), Vector3(0, 0.39, 0), RANGE_COLOR)
+		_turret_box(Vector3(0.35, 0.28, 1.45), Vector3(0, 0.15, -1.18), Color("b2d0c0"))
 	_muzzle = Marker3D.new()
 	_muzzle.name = "Muzzle"
 	_muzzle.position = Vector3(0, 0.15, -1.91)
@@ -62,6 +69,14 @@ func _turret_box(size: Vector3, offset: Vector3, color: Color) -> void:
 	visual.reparent(turret, false)
 
 
+func _air_defense() -> bool:
+	return definition != null and definition.weapon_data != null and definition.weapon_data.target_domain == TeamRules.TargetDomain.AIR
+
+
+func _range_color() -> Color:
+	return AIR_RANGE_COLOR if _air_defense() else RANGE_COLOR
+
+
 func _build_range_indicator() -> void:
 	range_indicator = MeshInstance3D.new()
 	range_indicator.name = "SelectedRange"
@@ -75,7 +90,7 @@ func _build_range_indicator() -> void:
 	range_indicator.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = RANGE_COLOR
+	material.albedo_color = _range_color()
 	range_indicator.material_override = material
 	add_child(range_indicator)
 	range_indicator.hide()
@@ -101,7 +116,7 @@ func refresh_construction() -> void:
 		turret.visible = operational
 	if is_instance_valid(range_indicator):
 		# Construction recolors ordinary meshes; range retains its readable cue.
-		(range_indicator.material_override as StandardMaterial3D).albedo_color = RANGE_COLOR
+		(range_indicator.material_override as StandardMaterial3D).albedo_color = _range_color()
 		range_indicator.visible = operational and selection_indicator.visible and is_alive()
 	activate_defense()
 
@@ -156,7 +171,7 @@ func source_authorized(notify_power: bool = true) -> bool:
 
 
 func target_available(target: Variant) -> bool:
-	return _base_available() and TeamRules.is_hostile_ground_unit(gameplay_field, owner_id, target) and global_position.distance_squared_to(target.global_position) <= attack_range * attack_range
+	return _base_available() and TeamRules.weapon_can_target(gameplay_field, owner_id, target, definition.weapon_data.target_domain, definition.weapon_data.ground_mobile_only) and target is RTSUnit and global_position.distance_squared_to(target.global_position) <= attack_range * attack_range
 
 
 func weapon_origin() -> Vector3:
@@ -171,11 +186,22 @@ func face_toward(point: Vector3, radians_per_second: float, delta: float) -> voi
 	if not source_authorized() or not is_instance_valid(self):
 		return
 	var direction := point - global_position
+	if _air_defense():
+		direction = point - turret.global_position
 	if direction.length_squared() > 0.000001:
 		turret.rotation.y = rotate_toward(turret.rotation.y, atan2(-direction.x, -direction.z) - global_rotation.y, radians_per_second * delta)
+		if _air_defense():
+			var horizontal := Vector2(direction.x, direction.z).length()
+			var elevation := atan2(direction.y, horizontal)
+			turret.rotation.x = rotate_toward(turret.rotation.x, elevation, radians_per_second * delta)
 
 
 func facing_error(point: Vector3) -> float:
+	if _air_defense():
+		var direction := point - turret.global_position
+		if direction.length_squared() <= 0.000001:
+			return 0.0
+		return acos(clampf((-turret.global_basis.z).normalized().dot(direction.normalized()), -1.0, 1.0))
 	var direction := point - global_position
 	return absf(angle_difference(turret.global_rotation.y, atan2(-direction.x, -direction.z)))
 
@@ -250,7 +276,7 @@ func _scan() -> void:
 			continue
 		var distance := global_position.distance_squared_to(candidate.global_position)
 		if distance > best_distance or (nearest != null and is_equal_approx(distance, best_distance) and not _identity_precedes(candidate, nearest)):
-			continue # Ground/owner/lifetime/range filters precede geometry queries.
+			continue # Domain/owner/lifetime/range filters precede geometry queries.
 		var line := field.fire_query.weapon_clearance(self, candidate, weapon.definition)
 		if not is_instance_valid(self) or authority_generation != version or gameplay_field != field or owner_id != owner or not source_authorized() or not is_instance_valid(self):
 			return

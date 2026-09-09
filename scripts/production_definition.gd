@@ -33,15 +33,27 @@ func is_valid() -> bool:
 		var building: bool = identifier == &"bulldozer" and builder != null
 		if building:
 			building = unit.combat_weapon == null and unit.damageable and unit.maximum_health == 200.0 and unit.movement_speed == 3.5 and not unit.retaliation_enabled and builder.work_tolerance == 0.3 and builder.assigned_site_id == 0
-		valid = (((rifle or rocket) and unit.movement_speed == 5.0) or collecting or building) and unit.scale == Vector3.ONE
+		var helicopter: bool = identifier == &"attack_helicopter" and unit.get_script() == load("res://scripts/attack_helicopter.gd") and unit.damageable and unit.combat_weapon != null and unit.combat_weapon.is_valid() and unit.combat_weapon.mode == WeaponDefinition.Mode.GUIDED_PROJECTILE and unit.combat_weapon.target_domain == TeamRules.TargetDomain.GROUND
+		if helicopter:
+			for property in ["maximum_health", "movement_speed", "flight_body_radius", "cruise_altitude", "takeoff_speed", "horizontal_turn_speed"]:
+				var value: float = unit.get(property)
+				helicopter = helicopter and is_finite(value) and value > 0.0
+			helicopter = helicopter and is_finite(float(unit.get("ground_datum")))
+		valid = (((rifle or rocket) and unit.movement_speed == 5.0) or collecting or building or helicopter) and unit.scale == Vector3.ONE
 	instance.free()
 	return valid
 
 
-func deployment_body() -> CapsuleShape3D:
+func deployment_body() -> Shape3D:
 	# Admission already validated the exact unit script and scale. Read the shape
 	# from that scene's unit, using the same factory its _ready uses for collision.
 	var unit := unit_scene.instantiate() as RTSUnit
+	if identifier == &"attack_helicopter":
+		var sphere := SphereShape3D.new()
+		sphere.radius = unit.get("flight_body_radius") if unit.get("flight_body_radius") != null else 0.5
+		sphere.set_meta("flight_plane_y", float(unit.get("ground_datum")) + float(unit.get("cruise_altitude")))
+		unit.free()
+		return sphere
 	var shape := unit.body_shape()
 	unit.free()
 	return shape

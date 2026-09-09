@@ -6,6 +6,8 @@ var factory_button: Button
 var depot_button: Button
 var power_plant_button: Button
 var defense_button: Button
+var airfield_button: Button
+var air_defense_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -40,6 +42,24 @@ func _ready() -> void:
 	defense_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(defense_button)
 	defense_button.pressed.connect(_begin_defense)
+	airfield_button = Button.new()
+	airfield_button.focus_mode = Control.FOCUS_NONE
+	airfield_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(airfield_button)
+	airfield_button.pressed.connect(_begin_airfield)
+	air_defense_button = Button.new()
+	air_defense_button.focus_mode = Control.FOCUS_NONE
+	air_defense_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(air_defense_button)
+	air_defense_button.pressed.connect(_begin_air_defense)
+	if (field as ConstructionField).airfield_definition != null:
+		var choices := GridContainer.new()
+		choices.columns = 2
+		choices.add_theme_constant_override("h_separation", 6)
+		column.add_child(choices)
+		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button]:
+			button.reparent(choices)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -97,10 +117,25 @@ func refresh_construction() -> void:
 		defense_button.text = "Build Ground Defense · %d cr · %s s" % [defense.credit_cost, str(defense.duration)]
 		defense_button.tooltip_text = "Ground Defense Battery · %d power · attacks hostile ground units" % defense.power_required
 		defense_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, defense).is_empty()
+	var airfield := world.airfield_definition
+	airfield_button.visible = build_button.visible and airfield != null
+	if airfield != null:
+		airfield_button.text = "Build Airfield · %d cr · %s s" % [airfield.credit_cost, str(airfield.duration)]
+		airfield_button.tooltip_text = "Airfield · 3 power · produces Attack Helicopters only"
+		airfield_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, airfield).is_empty()
+	var air_defense := world.air_defense_definition
+	air_defense_button.visible = build_button.visible and air_defense != null
+	if air_defense != null:
+		air_defense_button.text = "Build Air Defense · %d cr · %s s" % [air_defense.credit_cost, str(air_defense.duration)]
+		air_defense_button.tooltip_text = "Air Defense Battery · 3 power · attacks hostile aircraft only"
+		air_defense_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, air_defense).is_empty()
+	if airfield != null:
+		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button]:
+			button.text = button.text.replace("Build ", "").replace(" cr", "").replace(" s", "s")
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled)
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled) or (airfield_button.visible and not airfield_button.disabled) or (air_defense_button.visible and not air_defense_button.disabled)
 		var hint := "Choose a building, then place it." if any_available else reason
 		if builder != null:
 			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
@@ -193,6 +228,20 @@ func _begin_defense() -> void:
 	var world := field as ConstructionField
 	if world.power_enabled and world.builder_construction_enabled and world.defense_definition != null and is_instance_valid(world.placement):
 		world.placement.begin(_placement_source(), world.defense_definition)
+
+
+func _begin_airfield() -> void:
+	if _context_active() and field.gameplay_enabled:
+		var world := field as ConstructionField
+		if world.airfield_definition != null and is_instance_valid(world.placement):
+			world.placement.begin(_placement_source(), world.airfield_definition)
+
+
+func _begin_air_defense() -> void:
+	if _context_active() and field.gameplay_enabled:
+		var world := field as ConstructionField
+		if world.air_defense_definition != null and is_instance_valid(world.placement):
+			world.placement.begin(_placement_source(), world.air_defense_definition)
 
 
 func _cancel_site() -> void:

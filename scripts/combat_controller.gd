@@ -136,6 +136,8 @@ func _physics_process(delta: float) -> void:
 		weapon.advance(delta)
 	if unit.navigation_suspended:
 		return
+	if unit.has_method("is_taking_off") and bool(unit.call("is_taking_off")):
+		return # Pending combat survives orders, but the safe climb owns locomotion.
 	if state == State.NONE:
 		if player_command == PlayerCommand.MOVE and not unit.moving:
 			player_command = PlayerCommand.NONE
@@ -226,6 +228,15 @@ func _hold_blocked(version: int) -> void:
 
 
 func _update_pursuit(target: Node3D, version: int) -> void:
+	if TeamRules.target_domain(unit) == TeamRules.TargetDomain.AIR:
+		# Flight standoff uses the horizontal leg of the actual 3D range sphere.
+		# The aircraft keeps its cruise altitude and never queries ground nav.
+		var destination: Vector3 = unit.call("flight_pursuit_destination", target, weapon.definition.attack_range, pursuit_range_fraction)
+		if not destination.is_finite() or absf(destination.y - target.global_position.y) >= weapon.definition.attack_range:
+			_end_order("pursuit_unreachable")
+			return
+		_apply_pursuit(destination, target, version)
+		return
 	var map := unit.agent.get_navigation_map()
 	if NavigationServer3D.map_get_iteration_id(map) == 0:
 		return
@@ -236,6 +247,10 @@ func _update_pursuit(target: Node3D, version: int) -> void:
 	if path.is_empty() or path[path.size() - 1].distance_to(destination) > 0.1:
 		_end_order("pursuit_unreachable")
 		return
+	_apply_pursuit(destination, target, version)
+
+
+func _apply_pursuit(destination: Vector3, target: Node3D, version: int) -> void:
 	_last_target_position = target.global_position
 	var refresh := _has_chase and unit.moving
 	_has_chase = true

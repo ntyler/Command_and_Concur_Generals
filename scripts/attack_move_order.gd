@@ -51,12 +51,17 @@ func issue(destination: Vector3, slot: Vector3, parent_id: int, owner: int = -1)
 		return false
 	if not unit.gameplay_field.field_bounds.has_point(Vector2(destination.x, destination.z)):
 		return false
-	var map := unit.agent.get_navigation_map()
-	if NavigationServer3D.map_get_iteration_id(map) == 0:
-		return false
-	var path := NavigationServer3D.map_get_path(map, unit.global_position, slot, true)
-	if path.is_empty() or path[-1].distance_to(slot) > 0.1:
-		return false
+	if TeamRules.target_domain(unit) == TeamRules.TargetDomain.AIR:
+		var flight_slot: Vector3 = unit.call("flight_destination", slot)
+		if not flight_slot.is_finite() or not flight_slot.is_equal_approx(slot) or not bool(unit.call("flight_destination_valid", flight_slot)):
+			return false
+	else:
+		var map := unit.agent.get_navigation_map()
+		if NavigationServer3D.map_get_iteration_id(map) == 0:
+			return false
+		var path := NavigationServer3D.map_get_path(map, unit.global_position, slot, true)
+		if path.is_empty() or path[-1].distance_to(slot) > 0.1:
+			return false
 	_generation += 1
 	var version := _generation
 	active = true
@@ -121,6 +126,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if unit.navigation_suspended:
 		return
+	if unit.has_method("is_taking_off") and bool(unit.call("is_taking_off")):
+		return # Hold the replaceable parent intent while physical takeoff finishes.
 	_elapsed += delta
 	_scan_wait += delta
 	_clean_ignored()

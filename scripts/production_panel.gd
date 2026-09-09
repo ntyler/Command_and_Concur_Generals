@@ -45,6 +45,10 @@ func _ready() -> void:
 	power_warning = _label(column, "LOW POWER · Barracks/Factory production %d%%" % roundi(PowerGrid.LOW_POWER_RATE * 100.0))
 	if field is ConstructionField and (field as ConstructionField).defense_definition != null:
 		power_warning.text = "LOW POWER · Barracks/Factory production %d%%\nGround defenses cannot fire" % roundi(PowerGrid.LOW_POWER_RATE * 100.0)
+	if field is ConstructionField and (field as ConstructionField).airfield_definition != null:
+		power_warning.text = "LOW POWER · Production 50%\nGround and air defenses cannot fire"
+		# Keep the five-aircraft queue above the minimap at 720p.
+		column.add_theme_constant_override("separation", 3)
 	power_warning.add_theme_font_size_override("font_size", 14)
 	power_warning.add_theme_color_override("font_color", Color("ffce78"))
 	power_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -193,7 +197,7 @@ func _refresh() -> void:
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_theme_constant_override("separation", 3)
 		rows.add_child(row)
-		var compact_name := str(job["name"]).replace("Rifle Unit", "Rifle").replace("Rocket Vehicle", "Rocket").replace("Collector Truck", "Collector")
+		var compact_name := str(job["name"]).replace("Rifle Unit", "Rifle").replace("Rocket Vehicle", "Rocket").replace("Collector Truck", "Collector").replace("Attack Helicopter", "Helicopter")
 		var label := _label(row, "#%d %s" % [job["id"], compact_name])
 		label.add_theme_font_size_override("font_size", 14)
 		label.clip_text = true
@@ -256,6 +260,8 @@ func _health_text(health: UnitHealth) -> String:
 
 
 func _unit_status(unit: RTSUnit) -> String:
+	if unit.has_method("is_taking_off") and unit.call("is_taking_off"):
+		return "Taking off · orders queued"
 	if is_instance_valid(unit.attack_move) and unit.attack_move.active:
 		return "Engaging" if is_instance_valid(unit.attack_move.target_actor()) else "Attack-moving"
 	if is_instance_valid(unit.combat):
@@ -270,7 +276,7 @@ func _unit_status(unit: RTSUnit) -> String:
 		RTSUnit.MovementState.CONGESTED: return "Route congested"
 		RTSUnit.MovementState.RECOVERING: return "Recovering route"
 		RTSUnit.MovementState.FAILED: return "Movement failed"
-	return "Idle"
+	return "Hovering" if TeamRules.target_domain(unit) == TeamRules.TargetDomain.AIR else "Idle"
 
 
 func _commands(units: Array[RTSUnit]) -> String:

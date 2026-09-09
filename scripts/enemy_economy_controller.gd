@@ -129,7 +129,7 @@ func population() -> int:
 	if not is_instance_valid(field): return 0
 	var total := 0
 	for unit in field.units:
-		if field.contains_unit(unit) and unit.owner_id == OWNER and is_instance_valid(unit.combat) and is_instance_valid(unit.combat.weapon):
+		if field.contains_unit(unit) and TeamRules.target_domain(unit) == TeamRules.TargetDomain.GROUND and unit.owner_id == OWNER and is_instance_valid(unit.combat) and is_instance_valid(unit.combat.weapon):
 			total += 1
 	for producer in field._producers.values():
 		for job in producer.jobs():
@@ -142,7 +142,7 @@ func _prepare_rally() -> void:
 	var field := field_node()
 	var reserved := PackedVector3Array()
 	for unit in field.units:
-		if field.contains_unit(unit): reserved.append(field._reserved_command_destination(unit))
+		if field.contains_unit(unit) and TeamRules.target_domain(unit) == TeamRules.TargetDomain.GROUND: reserved.append(field._reserved_command_destination(unit))
 	var slots := field.destinations.generate_slots(field.get_world_3d().get_navigation_map(), config.staging_point, 1, reserved)
 	if not slots.is_empty() and slots[0].distance_to(config.staging_point) <= config.staging_radius:
 		_producer.set_rally(OWNER, slots[0])

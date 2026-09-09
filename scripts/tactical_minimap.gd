@@ -138,7 +138,7 @@ func refresh_markers() -> void:
 	for unit in field.units.duplicate():
 		if not is_instance_valid(unit) or not field.contains_unit(unit):
 			continue
-		markers.append({"identity": unit.get_instance_id(), "kind": "unit", "position": unit.global_position, "owner": unit.owner_id, "selected": selected_ids.has(unit.get_instance_id()), "depleted": false})
+		markers.append({"identity": unit.get_instance_id(), "kind": "aircraft" if TeamRules.target_domain(unit) == TeamRules.TargetDomain.AIR else "unit", "position": unit.global_position, "owner": unit.owner_id, "selected": selected_ids.has(unit.get_instance_id()), "depleted": false})
 		_watch(unit.availability_changed)
 		_watch(unit.tree_exiting)
 	var terrain := field.obstacles.duplicate()
@@ -146,7 +146,7 @@ func refresh_markers() -> void:
 		for building in (field as ProductionField).registered_buildings():
 			var rectangle := Rect2(Vector2(building.global_position.x, building.global_position.z) - building.footprint / 2.0, building.footprint)
 			terrain.erase(rectangle)
-			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant", "ground_defense_battery"][building.kind]
+			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant", "ground_defense_battery", "airfield", "air_defense_battery"][building.kind]
 			if building is ConstructionBuilding and not building.operational:
 				kind = "site"
 			markers.append({"identity": building.get_instance_id(), "kind": kind, "position": building.global_position, "owner": building.owner_id, "selected": false, "depleted": false, "rectangle": rectangle})
@@ -216,8 +216,11 @@ func _draw() -> void:
 		if mapping.content_to_world(point) == null:
 			continue
 		var color := Color("a7ecdf") if marker.owner == field.selection.friendly_owner_id else Color("ee7865")
-		if marker.kind == "unit":
-			draw_circle(point, 2.8, color)
+		if marker.kind == "unit" or marker.kind == "aircraft":
+			if marker.kind == "aircraft":
+				draw_colored_polygon(PackedVector2Array([point + Vector2(0, -5), point + Vector2(4, 4), point + Vector2(0, 2), point + Vector2(-4, 4)]), color)
+			else:
+				draw_circle(point, 2.8, color)
 			if marker.selected:
 				draw_arc(point, 5.0, 0, TAU, 16, Color.WHITE, 1.5, true)
 		elif marker.kind == "supply":
@@ -232,7 +235,7 @@ func _draw() -> void:
 			draw_rect(rectangle, color, false, 1.2)
 			if marker.kind == "ground_defense_battery":
 				draw_arc(point, 6.0, 0, TAU, 16, color, 1.2, true)
-			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "ground_defense_battery": "G", "site": "+"}[marker.kind]
+			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "ground_defense_battery": "G", "airfield": "F", "air_defense_battery": "A", "site": "+"}[marker.kind]
 			draw_string(font, point + Vector2(-4, 4), glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
 	if footprint.size() >= 3:
 		var outline := footprint.duplicate()

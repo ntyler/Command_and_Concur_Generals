@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/attack_helicopter.gd" id="1"]
+[ext_resource type="Resource" path="res://weapons/helicopter_rocket.tres" id="2"]
+
+[node name="AttackHelicopter" type="CharacterBody3D"]
+script = ExtResource("1")
+combat_weapon = ExtResource("2")
+unit_display_name = "Attack Helicopter"
+maximum_health = 180.0
+movement_speed = 8.0
+crowd_enabled = false

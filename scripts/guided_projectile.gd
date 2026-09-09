@@ -10,6 +10,8 @@ var speed: float
 var lifetime: float
 var damage: float
 var source_team: int
+var target_domain: int = TeamRules.TargetDomain.GROUND
+var ground_mobile_only: bool = false
 var collision_radius: float
 var spent: bool = false
 var outcome: Outcome = Outcome.NONE
@@ -26,6 +28,8 @@ func configure(field: TestField, source: RTSUnit, target: Node3D, definition: We
 	_source = weakref(source)
 	_target = weakref(target)
 	source_team = source.owner_id
+	target_domain = definition.target_domain
+	ground_mobile_only = definition.ground_mobile_only
 	speed = definition.projectile_speed
 	lifetime = definition.projectile_lifetime
 	damage = definition.damage
@@ -63,7 +67,7 @@ func _physics_process(delta: float) -> void:
 	if remaining <= 0.0:
 		_finish(Outcome.EXPIRED)
 		return
-	if not TeamRules.is_hostile_target(field, source_team, target):
+	if not TeamRules.weapon_can_target(field, source_team, target, target_domain, ground_mobile_only):
 		_finish(Outcome.INVALIDATED)
 		return
 	var aim := LineOfFire.aim(target)
@@ -109,7 +113,14 @@ func _finish(terminal: Outcome, world_contact: Vector3 = Vector3.ZERO) -> void:
 		if is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion():
 			CombatFeedback.world_impact(field, contact_position)
 	elif terminal == Outcome.TARGET:
-		applied = TeamRules.damage_target(_field.get_ref() as TestField, source_team, target_actor(), damage, _source.get_ref() as RTSUnit)
+		var field := _field.get_ref() as TestField
+		var target := target_actor()
+		# Captured launch eligibility survives source deletion or later commands;
+		# target ownership, membership and current domain are still authoritative.
+		if TeamRules.weapon_can_target(field, source_team, target, target_domain, ground_mobile_only):
+			applied = TeamRules.damage_target(field, source_team, target, damage, _source.get_ref() as RTSUnit)
+		else:
+			outcome = Outcome.INVALIDATED
 	if not is_instance_valid(self):
 		return
 	resolved.emit(applied)
