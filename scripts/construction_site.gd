@@ -8,6 +8,7 @@ var owner_id: int
 var paid: int
 var duration: float
 var rectangle: Rect2
+var orientation_degrees: int = 0
 var state: State = State.PREPARING
 var elapsed: float = 0.0
 var started_frame: int = -1

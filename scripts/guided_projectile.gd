@@ -80,10 +80,23 @@ func _physics_process(delta: float) -> void:
 	var contact := field.fire_query.sweep_sphere(get_world_3d(), last_segment_start, last_segment_end, collision_radius, LineOfFire.target_exclusions(target))
 	if not contact.available:
 		return
+	if LineOfFire.hits_intended_barrier(contact, target):
+		# At a joint, a different solid at the same/earlier spherical fraction
+		# remains obstruction. Do not let physics contact ordering manufacture a
+		# hit through an adjacent barrier or support belonging to another target.
+		var exclusions: Array[RID] = [(target as BarrierBuilding).get_rid()]
+		var other := field.fire_query.sweep_sphere(get_world_3d(), last_segment_start, last_segment_end, collision_radius, exclusions)
+		if not other.available:
+			return
+		if other.blocked and other.travel_fraction <= contact.travel_fraction + 0.000001:
+			contact = other
 	if contact.blocked:
 		age = minf(lifetime, age + travel_time * contact.travel_fraction)
 		global_position = contact.center_position
-		_finish(Outcome.WORLD, contact.position)
+		# Barriers retain their real solid shapes even as intended targets. A
+		# target contact uses the same exactly-once impact authority as arrival;
+		# any other collider remains a world obstruction with no collateral hit.
+		_finish(Outcome.TARGET if LineOfFire.hits_intended_barrier(contact, target) else Outcome.WORLD, contact.position)
 		return
 	global_position = last_segment_end
 	# Resolve contacts along the usable interval before expiration at its endpoint.
@@ -103,7 +116,7 @@ func _finish(terminal: Outcome, world_contact: Vector3 = Vector3.ZERO) -> void:
 		return
 	spent = true # Resolve once, before damage callbacks can reenter.
 	outcome = terminal
-	contact_position = world_contact if terminal == Outcome.WORLD else global_position
+	contact_position = world_contact if terminal == Outcome.WORLD or world_contact != Vector3.ZERO else global_position
 	set_physics_process(false)
 	hide()
 	queue_free()

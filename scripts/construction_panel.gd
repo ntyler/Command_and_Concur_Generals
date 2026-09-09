@@ -8,6 +8,14 @@ var power_plant_button: Button
 var defense_button: Button
 var airfield_button: Button
 var air_defense_button: Button
+var wall_button: Button
+var gate_button: Button
+var orientation_button: Button
+var gate_action_button: Button
+var gate_state_label: Label
+var _pending_gate: WeakRef
+var _pending_gate_open: bool = false
+var _pending_gate_owner: int = 0
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -52,14 +60,35 @@ func _ready() -> void:
 	air_defense_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(air_defense_button)
 	air_defense_button.pressed.connect(_begin_air_defense)
+	wall_button = Button.new()
+	gate_button = Button.new()
+	for button in [wall_button, gate_button]:
+		button.focus_mode = Control.FOCUS_NONE
+		button.add_theme_font_size_override("font_size", 14)
+		column.add_child(button)
+	wall_button.pressed.connect(_begin_barrier.bind(false))
+	gate_button.pressed.connect(_begin_barrier.bind(true))
 	if (field as ConstructionField).airfield_definition != null:
 		var choices := GridContainer.new()
 		choices.columns = 2
 		choices.add_theme_constant_override("h_separation", 6)
 		column.add_child(choices)
-		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button]:
+		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button, wall_button, gate_button]:
 			button.reparent(choices)
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	orientation_button = Button.new()
+	orientation_button.focus_mode = Control.FOCUS_NONE
+	orientation_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(orientation_button)
+	orientation_button.pressed.connect(_rotate_barrier)
+	gate_state_label = _label(column, "")
+	gate_state_label.add_theme_font_size_override("font_size", 14)
+	gate_state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gate_action_button = Button.new()
+	gate_action_button.focus_mode = Control.FOCUS_NONE
+	gate_action_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(gate_action_button)
+	gate_action_button.pressed.connect(_gate_action)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -132,10 +161,19 @@ func refresh_construction() -> void:
 	if airfield != null:
 		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button]:
 			button.text = button.text.replace("Build ", "").replace(" cr", "").replace(" s", "s")
+	for item in [[wall_button, world.wall_definition], [gate_button, world.gate_definition]]:
+		var button: Button = item[0]
+		var choice: ConstructionDefinition = item[1]
+		button.visible = build_button.visible and world.builder_construction_enabled and choice != null
+		if choice != null:
+			button.text = "%s · %d · %ss" % [choice.display_name(), choice.credit_cost, str(choice.duration)]
+			button.tooltip_text = "%s · %d HP · no power · one site at a time" % [choice.display_name(), choice.maximum_health]
+			button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, choice).is_empty()
+	_refresh_barrier_controls()
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled) or (airfield_button.visible and not airfield_button.disabled) or (air_defense_button.visible and not air_defense_button.disabled)
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled) or (airfield_button.visible and not airfield_button.disabled) or (air_defense_button.visible and not air_defense_button.disabled) or (wall_button.visible and not wall_button.disabled) or (gate_button.visible and not gate_button.disabled)
 		var hint := "Choose a building, then place it." if any_available else reason
 		if builder != null:
 			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
@@ -177,9 +215,62 @@ func refresh_construction() -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	if _context_active() and is_instance_valid(orientation_button):
+		_refresh_barrier_controls()
 	if is_instance_valid(site_progress) and site_progress.visible:
 		if _displayed_site != null:
 			site_progress.value = _displayed_site.progress() * 100.0
+
+
+func _refresh_barrier_controls() -> void:
+	var world := field as ConstructionField
+	var placing := is_instance_valid(world.placement) and world.placement.active and world.placement.definition != null and world.placement.definition.is_barrier()
+	orientation_button.visible = placing
+	if placing:
+		orientation_button.text = "Orientation %d° · Rotate R" % world.placement.orientation_degrees
+	var gate := field.selection.selected_building() as BarrierBuilding
+	var operable := gate != null and gate.kind == RTSBuilding.Kind.GATE and gate.operational
+	gate_state_label.visible = operable
+	gate_action_button.visible = operable
+	if operable:
+		gate_state_label.text = gate.gate_status()
+		gate_action_button.text = "Close Gate" if gate.physical_open else "Open Gate"
+		gate_action_button.disabled = not field.gameplay_enabled or gate.navigation_pending or not gate.effective_ready or world.construction.navigation.blocked
+
+
+func _begin_barrier(gate: bool) -> void:
+	if not _context_active() or not field.gameplay_enabled:
+		return
+	var world := field as ConstructionField
+	var choice := world.gate_definition if gate else world.wall_definition
+	if choice != null and is_instance_valid(world.placement):
+		world.placement.begin(_placement_source(), choice)
+
+
+func _rotate_barrier() -> void:
+	if _context_active():
+		(field as ConstructionField).placement.rotate_orientation()
+
+
+func _gate_action() -> void:
+	if not _context_active() or not field.gameplay_enabled:
+		return
+	var gate := field.selection.selected_building() as BarrierBuilding
+	if gate == null:
+		return
+	_pending_gate = weakref(gate)
+	_pending_gate_open = not gate.physical_open
+	_pending_gate_owner = field.selection.friendly_owner_id
+
+
+func _physics_process(_delta: float) -> void:
+	var request := _pending_gate
+	_pending_gate = null
+	if request == null or not _context_active():
+		return
+	var gate := request.get_ref() as BarrierBuilding
+	if is_instance_valid(gate):
+		gate.request_gate(_pending_gate_owner, _pending_gate_open)
 
 
 func _construction_changed(_site_id: int) -> void:
@@ -253,6 +344,7 @@ func _cancel_site() -> void:
 
 
 func _exit_tree() -> void:
+	_pending_gate = null
 	_displayed_site = null
 	if is_instance_valid(field) and (field as ConstructionField).construction.changed.is_connected(_construction_changed):
 		(field as ConstructionField).construction.changed.disconnect(_construction_changed)

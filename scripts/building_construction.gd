@@ -170,6 +170,11 @@ func _advance_builder(site: ConstructionSite) -> void:
 
 func pause_all() -> void:
 	# Freeze and teardown use this even after gameplay_enabled becomes false.
+	var owner := navigation.field()
+	if owner != null:
+		for building in owner.registered_buildings():
+			if building is BarrierBuilding:
+				building.freeze_gate()
 	for site in sites.values():
 		if site.builder_required:
 			_pause_state(site)
@@ -199,25 +204,30 @@ func can_begin(requester: int, headquarters: Variant, definition: ConstructionDe
 	return ""
 
 
-func validate(requester: int, headquarters: Variant, definition: ConstructionDefinition, point: Vector3) -> String:
+func validate(requester: int, headquarters: Variant, definition: ConstructionDefinition, point: Vector3, orientation: int = 0) -> String:
 	var reason := can_begin(requester, headquarters, definition)
 	if not reason.is_empty():
 		return reason
 	if not Engine.is_in_physics_frame():
 		return "Placement requires a physics tick"
-	reason = field().placement_geometry(point, definition)
+	if orientation not in [0, 90] or (not definition.is_barrier() and orientation != 0):
+		return "Unsupported building orientation"
+	point = field().construction_point(point, definition)
+	reason = field().placement_geometry(point, definition, orientation)
 	if reason.is_empty() and field().builder_construction_enabled:
-		var rectangle := Rect2(Vector2(point.x, point.z) - definition.footprint / 2.0, definition.footprint)
+		var footprint := definition.oriented_footprint(orientation)
+		var rectangle := Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
 		if field().plan_builder_access(headquarters as Bulldozer, rectangle).is_empty():
 			return "No reachable clear builder work position"
 	return reason
 
 
-func place(requester: int, headquarters: Variant, definition: ConstructionDefinition, point: Vector3) -> ConstructionResult:
-	var reason := validate(requester, headquarters, definition, point)
+func place(requester: int, headquarters: Variant, definition: ConstructionDefinition, point: Vector3, orientation: int = 0) -> ConstructionResult:
+	var reason := validate(requester, headquarters, definition, point, orientation)
 	if not reason.is_empty():
 		return ConstructionResult.reject(reason)
 	var owner := field()
+	point = owner.construction_point(point, definition)
 	var wallet := owner.credits
 	var initial_builder := headquarters as Bulldozer if owner.builder_construction_enabled else null
 	var initial_order := initial_builder.order_version if initial_builder != null else -1
@@ -228,12 +238,18 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 	site.paid = definition.credit_cost
 	site.duration = definition.duration
 	site.builder_required = owner.builder_construction_enabled
-	site.rectangle = Rect2(Vector2(point.x, point.z) - definition.footprint / 2.0, definition.footprint)
+	var footprint := definition.oriented_footprint(orientation)
+	site.rectangle = Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
+	site.orientation_degrees = orientation
 	if not wallet.spend(requester, site.paid):
 		return ConstructionResult.reject("Insufficient credits")
 	sites[site.site_id] = site
 	unfinished_id = site.site_id
 	var body: ConstructionBuilding = GroundDefenseBattery.new() if definition.kind in [RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY] else ConstructionBuilding.new()
+	if definition.is_barrier():
+		body.free()
+		body = BarrierBuilding.new()
+		(body as BarrierBuilding).orientation_degrees = orientation
 	body.site = site
 	body.operational = false
 	body.owner_id = requester
@@ -244,9 +260,9 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 		body.recipe = load("res://production/collector_truck.tres")
 	elif body.kind == RTSBuilding.Kind.AIRFIELD:
 		body.recipe = load("res://production/attack_helicopter.tres")
-	elif body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
+	elif body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY, RTSBuilding.Kind.WALL, RTSBuilding.Kind.GATE]:
 		body.recipe = null
-	body.footprint = definition.footprint
+	body.footprint = footprint
 	body.building_height = definition.height
 	body.name = "Built%s%d" % [definition.display_name().replace(" ", ""), site.site_id]
 	body.position = point
@@ -314,14 +330,28 @@ func cancel(requester: int, site_id: int) -> ConstructionResult:
 
 
 func _request_navigation() -> int:
-	if field() == null:
+	# Existing destruction cleanup must also synchronize during result freeze.
+	var owner := navigation.field()
+	if owner == null or closed:
 		return 0
-	var rectangles: Array[Rect2] = field().static_footprints.duplicate()
+	var rectangles: Array[Rect2] = owner.static_footprints.duplicate()
+	var included: Dictionary[int, bool] = {}
 	for site in sites.values():
 		if site.state not in [ConstructionSite.State.CANCELLING, ConstructionSite.State.CANCELLED]:
-			rectangles.append(site.rectangle)
-	field().obstacles = rectangles
+			var body: RTSBuilding = site.building()
+			if body is BarrierBuilding:
+				rectangles.append_array(body.navigation_footprints())
+				included[body.get_instance_id()] = true
+			else:
+				rectangles.append(site.rectangle)
+	for body in owner.registered_buildings():
+		if body is BarrierBuilding and not included.has(body.get_instance_id()) and (body.site == null or body.site.state not in [ConstructionSite.State.CANCELLING, ConstructionSite.State.CANCELLED]):
+			rectangles.append_array(body.navigation_footprints())
+	owner.obstacles = rectangles
 	var generation := navigation.request(rectangles)
+	for body in owner.registered_buildings():
+		if body is BarrierBuilding and (body.navigation_pending or not body.effective_ready):
+			body.nav_generation = generation
 	var pending := sites.get(unfinished_id) as ConstructionSite
 	if pending != null and pending.state in [ConstructionSite.State.PREPARING, ConstructionSite.State.CANCELLING]:
 		pending.nav_generation = generation
@@ -409,6 +439,17 @@ func _navigation_failed(generation: int, reason: String) -> void:
 
 func _departed(site_id: int) -> void:
 	_reconcile_departure.call_deferred(site_id)
+
+
+func _reconcile_barrier_departure(identity: int) -> void:
+	var owner := navigation.field()
+	if owner == null or closed:
+		return
+	var reference: WeakRef = owner._buildings.get(identity)
+	var body := reference.get_ref() as RTSBuilding if reference != null else null
+	if is_instance_valid(body) and owner.contains_building(body):
+		return # An idle same-field reparent preserves its synchronized footprint.
+	_request_navigation()
 
 
 func _reconcile_departure(site_id: int) -> void:

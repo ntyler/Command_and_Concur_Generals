@@ -5,6 +5,7 @@ extends RefCounted
 
 signal ready(generation: int)
 signal failed(generation: int, reason: String)
+signal synchronized(generation: int) # Commit guarded colliders before resuming actors.
 
 var generation: int = 0
 var busy: bool = false
@@ -70,6 +71,11 @@ func advance(delta: float) -> void:
 		_mesh = null
 		if finished != generation:
 			_submit()
+			return
+		# Gate transitions may reject their final close occupancy check and submit
+		# a rollback here. No actor sees the intermediate unusable navigation.
+		synchronized.emit(finished)
+		if field() == null or finished != generation:
 			return
 		busy = false
 		blocked = false
@@ -163,3 +169,5 @@ func close() -> void:
 		ready.disconnect(connection["callable"])
 	for connection in failed.get_connections():
 		failed.disconnect(connection["callable"])
+	for connection in synchronized.get_connections():
+		synchronized.disconnect(connection["callable"])

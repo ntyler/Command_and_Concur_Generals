@@ -14,4 +14,6 @@ extends Resource
 @export var staging_point := Vector3(24, 0, 16)
 @export var staging_radius: float = 3.2
 @export var assault_approach := Vector3(-14, 0, -7)
-
+@export var breach_enabled: bool = false # Fortified Assault only; older scenes unchanged.
+@export var breach_reassessment_interval: float = 0.5
+@export var breach_candidate_limit: int = 8

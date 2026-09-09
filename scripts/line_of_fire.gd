@@ -18,6 +18,7 @@ class Trace extends RefCounted:
 	var to_position: Vector3
 	var center_position: Vector3 # Safe sphere center, distinct from surface contact.
 	var travel_fraction: float = 1.0
+	var intended_contact: bool = false # A clear authorized shot ends on target geometry.
 	func is_clear() -> bool:
 		return available and not blocked
 
@@ -50,9 +51,20 @@ func _init() -> void:
 static func target_exclusions(target: Node3D) -> Array[RID]:
 	# Only the intended building is excluded. Every intervening blocker remains solid.
 	var exclusions: Array[RID] = []
-	if target is RTSBuilding:
+	if target is RTSBuilding and not target is BarrierBuilding:
 		exclusions.append(target.get_rid())
 	return exclusions
+
+
+static func hits_intended_barrier(trace: Trace, target: Node3D) -> bool:
+	return trace.available and trace.blocked and target is BarrierBuilding and target.owns_weapon_collider(trace.collider_id)
+
+
+static func accept_intended_contact(trace: Trace, target: Node3D) -> Trace:
+	if hits_intended_barrier(trace, target):
+		trace.blocked = false
+		trace.intended_contact = true
+	return trace
 
 
 static func muzzle(unit: Node3D) -> Vector3:
@@ -98,7 +110,7 @@ func firing_line(source: Node3D, target: Node3D) -> Trace:
 	if not attachment.is_clear():
 		return attachment
 	exclusions.append_array(target_exclusions(target))
-	return segment(world, muzzle(source), aim(target), exclusions)
+	return accept_intended_contact(segment(world, muzzle(source), aim(target), exclusions), target)
 
 
 func segment(world: World3D, from: Vector3, to: Vector3, exclusions: Array[RID] = []) -> Trace:

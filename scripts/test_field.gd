@@ -395,6 +395,36 @@ func _explicit_batch_selection(result: CommandBatchResult, candidates: Array) ->
 	return selected
 
 
+func issue_attack_for(owner: int, candidates: Array, target: Variant) -> CommandBatchResult:
+	# Explicit recipients share existing owner authority. No selection mutation,
+	# movement assignments or claim that historical acceptance remains active.
+	var result := _new_batch()
+	var selected := _explicit_batch_selection(result, candidates)
+	var eligible := false
+	for unit in selected:
+		if not TeamRules.is_controlled(self, unit, owner):
+			continue
+		if is_instance_valid(unit.combat) and is_instance_valid(unit.combat.weapon) and (unit.combat.weapon.definition == null or not unit.combat.weapon.definition.is_valid()):
+			return result
+		if TeamRules.can_attack(self, unit, target):
+			eligible = true
+	if not eligible:
+		return result
+	_commit_owner_command(owner, result.generation)
+	for unit in selected:
+		if not is_instance_valid(self) or not _attack_move_context_active() or result.generation != _owner_authority(owner):
+			break
+		if not is_instance_valid(unit) or not TeamRules.is_controlled(self, unit, owner) or not TeamRules.can_attack(self, unit, target):
+			continue
+		var identity := unit.unit_id
+		if unit.combat.issue_attack(target):
+			result.accepted_ids.append(identity)
+	if not is_instance_valid(self) or not _attack_move_context_active():
+		result.superseded = true
+		return result
+	return _finish_owner_batch(owner, result, "Attack order")
+
+
 func issue_attack_move_for(owner: int, candidates: Array, clicked: Vector3) -> CommandBatchResult:
 	var result := _new_batch()
 	var selected := _explicit_batch_selection(result, candidates)

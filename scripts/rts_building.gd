@@ -2,7 +2,7 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT, GROUND_DEFENSE_BATTERY, AIRFIELD, AIR_DEFENSE_BATTERY }
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT, GROUND_DEFENSE_BATTERY, AIRFIELD, AIR_DEFENSE_BATTERY, WALL, GATE }
 @export var owner_id: int = 1:
 	set(value):
 		if owner_id == value:
@@ -44,6 +44,10 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.WALL:
+		return "Wall"
+	if kind == Kind.GATE:
+		return "Gate"
 	if kind == Kind.AIRFIELD:
 		return "Airfield"
 	if kind == Kind.AIR_DEFENSE_BATTERY:
@@ -89,6 +93,33 @@ static func depot_access_layout(origin: Vector3, size: Vector2, identity: int = 
 func _ready() -> void:
 	collision_layer = 4 | LineOfFire.BLOCKER_MASK
 	collision_mask = 0
+	_build_geometry()
+	var label := Label3D.new()
+	_identity_label = label
+	label.text = "%s · %d" % [display_name(), owner_id]
+	label.position.y = building_height + (1.25 if kind == Kind.POWER_PLANT else 0.6)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 32
+	label.pixel_size = 0.025
+	add_child(label)
+	selection_indicator = _mesh(Vector3(footprint.x + 0.25, 0.02, footprint.y + 0.25), Vector3(0, 0.035, 0), Color("86ffcb"))
+	selection_indicator.hide()
+	rally_indicator = MeshInstance3D.new()
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.35
+	ring.outer_radius = 0.5
+	rally_indicator.mesh = ring
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("ffce78")
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rally_indicator.material_override = material
+	add_child(rally_indicator)
+	rally_indicator.top_level = true
+	rally_indicator.hide()
+	_refresh_health()
+
+
+func _build_geometry() -> void:
 	var box := BoxShape3D.new()
 	box.size = Vector3(footprint.x, building_height, footprint.y)
 	var collider := CollisionShape3D.new()
@@ -124,29 +155,6 @@ func _ready() -> void:
 		for x in [-0.7, 0.7]:
 			_mesh(Vector3(0.18, 0.02, 1.7), Vector3(x, building_height + 0.16, 0), Color("8de9ef"))
 		_mesh(Vector3(1.4, 0.02, 0.18), Vector3(0, building_height + 0.16, 0), Color("8de9ef"))
-	var label := Label3D.new()
-	_identity_label = label
-	label.text = "%s · %d" % [display_name(), owner_id]
-	label.position.y = building_height + (1.25 if kind == Kind.POWER_PLANT else 0.6)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.font_size = 32
-	label.pixel_size = 0.025
-	add_child(label)
-	selection_indicator = _mesh(Vector3(footprint.x + 0.25, 0.02, footprint.y + 0.25), Vector3(0, 0.035, 0), Color("86ffcb"))
-	selection_indicator.hide()
-	rally_indicator = MeshInstance3D.new()
-	var ring := TorusMesh.new()
-	ring.inner_radius = 0.35
-	ring.outer_radius = 0.5
-	rally_indicator.mesh = ring
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("ffce78")
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rally_indicator.material_override = material
-	add_child(rally_indicator)
-	rally_indicator.top_level = true
-	rally_indicator.hide()
-	_refresh_health()
 
 
 func _physics_process(delta: float) -> void:

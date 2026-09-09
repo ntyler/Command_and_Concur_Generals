@@ -11,6 +11,8 @@ const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -
 @export var defense_definition: ConstructionDefinition
 @export var airfield_definition: ConstructionDefinition
 @export var air_defense_definition: ConstructionDefinition
+@export var wall_definition: ConstructionDefinition
+@export var gate_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
 @export var builder_construction_enabled: bool = false
 @export_range(0.85, 2.0, 0.05) var builder_work_distance: float = 1.3
@@ -105,7 +107,7 @@ func find_spawn(building: RTSBuilding, body: Shape3D = null) -> PackedVector3Arr
 
 
 func supports_construction(definition: ConstructionDefinition) -> bool:
-	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition or definition == power_plant_definition or (builder_construction_enabled and power_enabled and definition in [defense_definition, airfield_definition, air_defense_definition]))
+	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition or definition == power_plant_definition or (builder_construction_enabled and definition in [wall_definition, gate_definition]) or (builder_construction_enabled and power_enabled and definition in [defense_definition, airfield_definition, air_defense_definition]))
 
 
 func builder_work_positions(rectangle: Rect2) -> Array[Dictionary]:
@@ -166,7 +168,33 @@ func builder_can_work(builder: Bulldozer, site: ConstructionSite) -> bool:
 
 
 func protected_areas() -> Array[Rect2]:
-	var rectangles: Array[Rect2] = ACCESS_CORRIDORS.duplicate()
+	var rectangles: Array[Rect2] = []
+	for region in protected_regions():
+		rectangles.append(region["rectangle"])
+	return rectangles
+
+
+func _protected_region(identity: String, rectangle: Rect2, owner: Node, reason: String) -> Dictionary:
+	return {"id": identity, "rectangle": rectangle, "owner_id": owner.get_instance_id(), "owner_name": str(owner.name), "reason": reason}
+
+
+func _delivery_regions(target: Node3D, reason: String) -> Array[Dictionary]:
+	var regions: Array[Dictionary] = []
+	for access in access_positions(target):
+		var point: Vector3 = access["point"]
+		var dock: Vector3 = access["dock"]
+		var rectangle := Rect2(Vector2(point.x, point.z), Vector2(dock.x - point.x, dock.z - point.z)).abs().grow(0.7)
+		regions.append(_protected_region("%d/access/%d" % [target.get_instance_id(), access["slot"]], rectangle, target, reason))
+	return regions
+
+
+func protected_regions() -> Array[Dictionary]:
+	# The map owns these fixed routes; they are not a building's delivery bays.
+	# Preserve their geometry while giving validation and presentation one source.
+	var regions: Array[Dictionary] = []
+	var corridor_reasons := ["Blocks main supply route", "Blocks HQ approach corridor", "Blocks southern base access corridor"]
+	for index in ACCESS_CORRIDORS.size():
+		regions.append(_protected_region("map/access/%d" % index, ACCESS_CORRIDORS[index], self, corridor_reasons[index]))
 	var targets: Array[Node3D] = []
 	if is_instance_valid(headquarters) and contains_building(headquarters):
 		targets.append(headquarters)
@@ -178,20 +206,41 @@ func protected_areas() -> Array[Rect2]:
 		if is_instance_valid(cache) and contains_cache(cache):
 			targets.append(cache)
 	for target in targets:
-		for access in access_positions(target):
-			var point: Vector3 = access["point"]
-			var dock: Vector3 = access["dock"]
-			rectangles.append(Rect2(Vector2(point.x, point.z), Vector2(dock.x - point.x, dock.z - point.z)).abs().grow(0.7))
+		var reason := "Blocks supply cache %d collection access" % (target as SupplyCache).cache_id if target is SupplyCache else "Blocks HQ delivery access" if (target as RTSBuilding).kind == RTSBuilding.Kind.HEADQUARTERS else "Blocks Supply Depot delivery access"
+		regions.append_array(_delivery_regions(target, reason))
 	for site in construction.sites.values():
 		if site.state in [ConstructionSite.State.CANCELLING, ConstructionSite.State.CANCELLED]:
 			continue
 		var body: RTSBuilding = site.building()
-		if is_instance_valid(body) and body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
+		if not is_instance_valid(body) or not contains_building(body):
+			continue # A departed body must not reserve an exit until deferred cleanup.
+		if body.kind in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY, RTSBuilding.Kind.WALL, RTSBuilding.Kind.GATE]:
 			continue # Generators and defenses need builder access, but no deployment exit.
 		# Protect the entire fixed six-sample exit neighborhood, plus the link from
 		# the door. This is geometry protection, not a center-point test.
-		rectangles.append(exit_area(site.rectangle))
-	return rectangles
+		regions.append(_protected_region("%d/exit" % body.get_instance_id(), exit_area(site.rectangle), body, "Blocks %s production exit" % body.display_name()))
+	return regions
+
+
+func overlapping_protected_regions(point: Vector3, definition: ConstructionDefinition, orientation: int = 0) -> Array[Dictionary]:
+	var overlaps: Array[Dictionary] = []
+	if definition == null or not point.is_finite():
+		return overlaps
+	point = construction_point(point, definition)
+	var footprint := definition.oriented_footprint(orientation)
+	var rectangle := Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
+	var clear := rectangle.grow(CLEARANCE)
+	for region in protected_regions():
+		var reserved: Rect2 = region["rectangle"]
+		if clear.intersects(reserved, true):
+			region["footprint"] = rectangle
+			region["clearance"] = clear
+			# Inclusive edge contact is protected too. Preserve its world position.
+			var start := clear.position.max(reserved.position)
+			region["overlap"] = Rect2(start, clear.end.min(reserved.end) - start)
+			region["clearance_only"] = not rectangle.intersects(reserved, true)
+			overlaps.append(region)
+	return overlaps
 
 
 func exit_area(rectangle: Rect2) -> Rect2:
@@ -208,21 +257,53 @@ func depot_access_areas(rectangle: Rect2) -> Array[Rect2]:
 	return areas
 
 
-func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> String:
+func construction_point(point: Vector3, definition: ConstructionDefinition) -> Vector3:
+	# Only barriers use the one-world-unit center grid; all prior placement stays free.
+	return Vector3(snappedf(point.x, 1.0), point.y, snappedf(point.z, 1.0)) if definition != null and definition.is_barrier() else point
+
+
+func _barrier_end_connection(rectangle: Rect2, neighbor: Rect2) -> bool:
+	# Permit exact collinear end contact only. The entire gate span is reserved,
+	# even while open, so no wall can be committed into its doorway.
+	if rectangle.size.x > rectangle.size.y and neighbor.size.x > neighbor.size.y:
+		return is_equal_approx(rectangle.position.y, neighbor.position.y) and is_equal_approx(rectangle.size.y, neighbor.size.y) and (is_equal_approx(rectangle.end.x, neighbor.position.x) or is_equal_approx(neighbor.end.x, rectangle.position.x))
+	if rectangle.size.y > rectangle.size.x and neighbor.size.y > neighbor.size.x:
+		return is_equal_approx(rectangle.position.x, neighbor.position.x) and is_equal_approx(rectangle.size.x, neighbor.size.x) and (is_equal_approx(rectangle.end.y, neighbor.position.y) or is_equal_approx(neighbor.end.y, rectangle.position.y))
+	return false
+
+
+func placement_geometry(point: Vector3, definition: ConstructionDefinition, orientation: int = 0) -> String:
 	if not point.is_finite() or absf(point.y) > 0.05:
 		return "Requires flat ground"
-	var rectangle := Rect2(Vector2(point.x, point.z) - definition.footprint / 2.0, definition.footprint)
+	if orientation not in [0, 90] or (orientation != 0 and not definition.is_barrier()):
+		return "Choose 0 or 90 degrees for a barrier"
+	point = construction_point(point, definition)
+	var footprint := definition.oriented_footprint(orientation)
+	var rectangle := Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
 	var clear := rectangle.grow(CLEARANCE)
 	if not BUILD_AREA.encloses(clear) or not field_bounds.grow(-CLEARANCE).encloses(clear):
 		return "Full footprint and clearance must fit inside the green boundary"
+	var barrier_geometry: Array[Rect2] = []
+	var connected_bodies: Array[RID] = []
+	for building in registered_buildings():
+		if not building is BarrierBuilding:
+			continue
+		var neighbor := Rect2(Vector2(building.global_position.x, building.global_position.z) - building.footprint / 2.0, building.footprint)
+		barrier_geometry.append_array((building as BarrierBuilding).navigation_footprints())
+		if definition.is_barrier() and _barrier_end_connection(rectangle, neighbor):
+			connected_bodies.append(building.get_rid())
+		elif clear.intersects(neighbor.grow(CLEARANCE), true):
+			return "Barrier overlap or clearance; align ends outside the gate opening"
 	for occupied in obstacles:
+		if barrier_geometry.has(occupied):
+			continue # Full registered barrier spans were checked above.
 		if clear.intersects(occupied.grow(CLEARANCE), true):
 			return "Too close to a building, obstacle or supply cache"
-	for protected in protected_areas():
-		if clear.intersects(protected, true):
-			return "Protected deposit, supply, exit or access corridor"
+	var protected_overlaps := overlapping_protected_regions(point, definition, orientation)
+	if not protected_overlaps.is_empty():
+		return protected_overlaps[0]["reason"]
 	# Fixed generators and defenses have no production exit.
-	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]:
+	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY, RTSBuilding.Kind.WALL, RTSBuilding.Kind.GATE]:
 		var exit_rectangle := exit_area(rectangle)
 		if not BUILD_AREA.encloses(exit_rectangle):
 			return "%s exit must fit inside the construction area" % definition.display_name()
@@ -246,6 +327,7 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 			return "Complete footprint requires flat terrain"
 	_placement_shape.size = Vector3(clear.size.x, definition.height + 0.1, clear.size.y)
 	_placement_query.transform = Transform3D(Basis.IDENTITY, point + Vector3.UP * (definition.height / 2.0 + 0.02))
+	_placement_query.exclude = connected_bodies
 	if not get_world_3d().direct_space_state.intersect_shape(_placement_query, 1).is_empty():
 		return "Footprint clearance is occupied"
 	# Explicit live-unit bounds also cover a unit registered earlier in this tick,
@@ -258,6 +340,7 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 
 func set_movement_debug(enabled: bool) -> void:
 	super.set_movement_debug(enabled)
+	_refresh_placement_guides()
 	update_placement_guides_visibility()
 
 
@@ -277,8 +360,11 @@ func _refresh_placement_guides(_site_id: int = 0) -> void:
 	var mesh := ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	_outline(mesh, BUILD_AREA, Color("7eb9a0"))
-	for rectangle in protected_areas():
-		_outline(mesh, rectangle, Color("b6a677"))
+	# Ordinary placement highlights its actual conflicts in BuildingPlacement.
+	# The complete reservation map remains available only in F3 diagnostics.
+	if movement_debug:
+		for rectangle in protected_areas():
+			_outline(mesh, rectangle, Color("68694f"))
 	mesh.surface_end()
 	placement_guides.mesh = mesh
 	placement_guides.visible = movement_debug or (is_instance_valid(placement) and placement.active)

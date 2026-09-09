@@ -81,15 +81,13 @@ func _update_objective() -> void:
 		objective_label.text = "Destroy enemy HQ · Protect your HQ\n" + phase
 
 
-func protected_areas() -> Array[Rect2]:
-	var areas := super.protected_areas()
+func protected_regions() -> Array[Dictionary]:
+	var regions := super.protected_regions()
 	if is_instance_valid(enemy_headquarters) and contains_building(enemy_headquarters):
-		for access in access_positions(enemy_headquarters):
-			var point: Vector3 = access["point"]
-			var dock: Vector3 = access["dock"]
-			areas.append(Rect2(Vector2(point.x, point.z), Vector2(dock.x - point.x, dock.z - point.z)).abs().grow(0.7))
+		regions.append_array(_delivery_regions(enemy_headquarters, "Blocks enemy HQ delivery access"))
 	if is_instance_valid(enemy_barracks) and contains_building(enemy_barracks):
-		areas.append(exit_area(ENEMY_BARRACKS))
-	areas.append(Rect2(Vector2(enemy_config.staging_point.x, enemy_config.staging_point.z) - Vector2.ONE * enemy_config.staging_radius, Vector2.ONE * enemy_config.staging_radius * 2))
-	return areas
-
+		var rectangle := Rect2(Vector2(enemy_barracks.global_position.x, enemy_barracks.global_position.z) - enemy_barracks.footprint / 2.0, enemy_barracks.footprint)
+		regions.append(_protected_region("%d/exit" % enemy_barracks.get_instance_id(), exit_area(rectangle), enemy_barracks, "Blocks enemy Barracks production exit"))
+	var staging := Rect2(Vector2(enemy_config.staging_point.x, enemy_config.staging_point.z) - Vector2.ONE * enemy_config.staging_radius, Vector2.ONE * enemy_config.staging_radius * 2)
+	regions.append(_protected_region("map/enemy-staging", staging, self, "Blocks enemy staging area"))
+	return regions

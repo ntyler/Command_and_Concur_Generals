@@ -75,7 +75,7 @@ func try_fire(target: Variant) -> bool:
 			if shot_definition.target_domain == TeamRules.TargetDomain.AIR:
 				CombatFeedback.world_tracer(field, muzzle, aim, Color("99ddff"), 0.08)
 			else:
-				CombatFeedback.world_tracer(field, muzzle, aim)
+				CombatFeedback.world_tracer(field, muzzle, line.position if line.intended_contact else aim)
 		if not is_instance_valid(self):
 			return true
 	fired.emit(target if is_instance_valid(target) else null, projectile)
