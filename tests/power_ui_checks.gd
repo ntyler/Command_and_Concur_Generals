@@ -38,7 +38,9 @@ func _power_ui_place(button: Button, definition: ConstructionDefinition, point: 
 	await _click(button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	_motion(_world_screen(point))
 	await _frames(8)
-	_check(powered.placement.active and powered.placement.valid and powered.placement.definition == definition, "viewport build button creates the expected authoritative valid preview")
+	var ready := powered.placement.active and powered.placement.valid and powered.placement.definition == definition
+	_check(ready, "viewport build button creates the expected authoritative valid preview")
+	if not ready: return null
 	var balance := powered.credits.balance(1)
 	await _click(_world_screen(point), MOUSE_BUTTON_LEFT)
 	var result := powered.placement.last_result
@@ -84,6 +86,14 @@ func _power_ui_play() -> void:
 	await _hud_pick_building(barracks)
 	_check(panel.power_label.text == "Power: 0 generated / 2 required" and panel.power_warning.visible and panel.power_warning.text.contains("LOW POWER") and panel.power_warning.text.contains("50%"), "actual completed idle Barracks creates a clear text shortage warning")
 	_check(panel.selection_details.text.contains("Power required: 2") and panel.selection_details.text.contains("Production rate: 50%") and panel.train_button.text.contains("base"), "selected consumer shows nominal demand and effective rate without a misleading remaining-time estimate")
+	# The north work face is hidden behind the completed Barracks from this
+	# camera. Recall the group assigned above and move into view through input;
+	# clicking its occluded anchor correctly selects the intervening building.
+	await _hud_key(KEY_2)
+	_check(powered.selection.selected_units() == [actor], "viewport group recall retrieves the builder behind its completed Barracks")
+	await _click(_world_screen(Vector3(-19, 0, 0)), MOUSE_BUTTON_RIGHT)
+	if not await _until(func() -> bool: return actor.movement_state == RTSUnit.MovementState.ARRIVED and actor.global_position.distance_to(Vector3(-19, 0, 0)) < 0.5, 10, "recalled builder physically moves into unobscured viewport ground"): return
+	await _hud_pick_building(barracks)
 	await _hud_pick_unit(actor)
 	await _power_ui_layouts("power_shortage_builder")
 	await _click(panel.power_plant_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
@@ -106,9 +116,15 @@ func _power_ui_play() -> void:
 	await _power_capture("power_paused_plant_1280x720")
 	await _hud_pick_building(barracks)
 	var paid_before := powered.credits.balance(1)
+	var deployments: Array[Dictionary] = []
+	barracks.production.deployed.connect(func(job: int, unit: int, _rally: bool) -> void:
+		deployments.append({"job": job, "unit": unit, "tick": Engine.get_physics_frames(), "plant_elapsed": plant_site.elapsed, "queue": barracks.production.jobs()})
+	)
 	for index in 5:
 		await _click(panel.train_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	_check(barracks.production.count() == 5 and powered.credits.balance(1) == paid_before - 500 and panel.cancel_buttons.size() == 5, "five viewport Train clicks use the normal paid FIFO queue during shortage")
+	var original_job := barracks.production.jobs()[0]
+	var next_job_id: int = barracks.production.jobs()[1].id
 	await _frames(60)
 	_check(barracks.production.progress() > 0.05 and barracks.production.progress() < 0.2 and panel.progress_bar.value > 0 and panel.selection_details.text.contains("50%"), "visible queued Rifle progress advances during low power with the effective rate shown")
 	await _power_ui_layouts("power_shortage_queue")
@@ -119,9 +135,37 @@ func _power_ui_play() -> void:
 	await _click(_world_screen(plant.global_position + Vector3.UP), MOUSE_BUTTON_RIGHT)
 	_check(plant_site.builder() == actor and actor.assigned_site_id == plant_site.site_id, "viewport right-click resumes the same paused Power Plant with its builder")
 	await _hud_pick_building(barracks)
+	if not await _until(func() -> bool: return plant_site.elapsed >= 7.0, 15, "resumed builder performs actual work before the UI restoration observation"): return
+	var active_job := barracks.production.jobs()[0]
+	var observed_tick := Engine.get_physics_frames()
+	_check(active_job.id == original_job.id and active_job.duration == 5.0 and active_job.paid == 100 and active_job.elapsed < active_job.duration, "continuity observation identifies the original paid five-second job still training")
+	# Capture the committed grid notification before this tick's producer advance.
+	# Follow stable IDs: the first job legitimately finishes before the plant.
+	var transition := {}
+	powered.power_grid.changed.connect(func() -> void:
+		if transition.is_empty() and powered.power_snapshot(1).generated == 10:
+			transition.merge({"tick": Engine.get_physics_frames(), "queue": barracks.production.jobs()})
+	)
+	if not await _until(func() -> bool: return plant_site.elapsed >= 9.0, 3, "builder reaches the pre-completion sampling boundary through real work"): return
+	var continuing_job := barracks.production.jobs()[0]
+	var low_tick := Engine.get_physics_frames()
+	_check(deployments.size() == 1 and deployments[0].job == original_job.id and deployments[0].plant_elapsed < 10.0 and deployments[0].queue[0].id == next_job_id and deployments[0].queue[0].elapsed == 0.0, "original stable job deploys exactly once before power restoration and releases its untrained FIFO successor")
+	_check(continuing_job.id == next_job_id and continuing_job.elapsed > 0.0 and continuing_job.elapsed < 1.0 and barracks.production.jobs().slice(1).all(func(job: Dictionary) -> bool: return job.elapsed == 0.0), "next paid job alone advances at half rate while later FIFO jobs remain untrained")
+	if not deployments.is_empty():
+		_check(absf(active_job.elapsed + (deployments[0].tick - observed_tick) / 60.0 * 0.5 - active_job.duration) <= 0.035, "original job completion time accounts for retained elapsed seconds and the actual half-rate interval")
 	if not await _builder_complete(plant_site): return
 	await _frames(3)
 	_check(panel.power_label.text == "Power: 10 generated / 2 required" and not panel.power_warning.visible and panel.selection_details.text.contains("Production rate: 100%"), "actual builder completion updates the global grid and selected consumer to full rate")
+	_check(not transition.is_empty() and transition.queue[0].id == continuing_job.id and transition.queue[0].elapsed >= continuing_job.elapsed and transition.queue[0].elapsed < continuing_job.duration, "grid restoration observes the same successor still training with retained progress")
+	if transition.is_empty(): return
+	var restored_job := barracks.production.jobs()[0]
+	_check(absf(transition.queue[0].elapsed - continuing_job.elapsed - (transition.tick - low_tick - 1) / 60.0 * 0.5) <= 0.035, "same stable job earns half-rate work up to the documented pre-increment power boundary")
+	_check(restored_job.id == continuing_job.id and absf(restored_job.elapsed - transition.queue[0].elapsed - (Engine.get_physics_frames() - transition.tick + 1) / 60.0) <= 0.035, "same active job immediately earns full-rate work after the committed power transition")
+	await _frames(60)
+	var full_rate_job := barracks.production.jobs()[0]
+	_check(full_rate_job.id == continuing_job.id and full_rate_job.paid == 100 and full_rate_job.duration == 5.0 and absf(full_rate_job.elapsed - restored_job.elapsed - 1.0) <= 0.035 and panel.progress_bar.value > 0, "visible power restoration preserves identity/payment/duration and adds one full training second without restarting")
+	_check(deployments.size() == 1 and not barracks.production.jobs().any(func(job: Dictionary) -> bool: return job.id == original_job.id) and powered.credits.balance(1) == paid_before - 400 and powered.units.any(func(unit: RTSUnit) -> bool: return unit.unit_id == deployments[0].unit and powered.contains_unit(unit)), "original job stays deployed exactly once with no transition charge/refund and its real unit remains registered")
+	print("POWER_UI_CONTINUITY: original=%s observed_tick=%d deployment=%s transition=%s restored=%s full_rate=%s wallet=%d" % [active_job, observed_tick, deployments, transition, restored_job, full_rate_job, powered.credits.balance(1)])
 	await _hud_pick_building(plant)
 	_check(panel.selection_details.text.contains("450 / 450 HP") and panel.selection_details.text.contains("Generation: 10 power") and plant.production == null and plant.recipe == null and not panel.train_button.visible and panel.cancel_buttons.is_empty(), "completed Power Plant shows inherited health and generation without unit production controls")
 	powered.tactical_minimap.refresh_markers()
@@ -162,3 +206,9 @@ func _power_ui_play() -> void:
 	await _frames(3)
 	_check(powered.credits.balance(1) == 1000 and panel.power_label.text == "Power: 0 generated / 0 required" and not panel.power_warning.visible and not powered.help_panel.is_open(), "Restart restores configured opening and clears stale shortage and Help state")
 	await _power_capture("power_restart_1280x720")
+	# This is the actual freshly reloaded scene with its configured wallet and
+	# live enemy scheduler, without the isolated UI fixture's overrides.
+	_check(powered.enemy_controller.is_physics_processing() and powered.enemy_config.first_wave_time == 90.0, "normal playable scene retains its live configured enemy schedule")
+	await _hud_pick_unit(_player_builders()[0])
+	_check(panel.power_plant_button.visible and not panel.power_plant_button.disabled, "normal 1000-credit opening offers Bulldozer Power Plant construction")
+	await _power_ui_layouts("power_normal_opening")
