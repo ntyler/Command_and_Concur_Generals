@@ -1,6 +1,6 @@
 # Milestone 15 — Airfield, Attack Helicopter and Air Defense
 
-**Validation in progress (2026-09-09).** This saved checkpoint will be replaced by the completed handoff after the serial matrix and final source/link checks. No human keyboard-and-mouse playtest occurred.
+**Milestone 15: COMPLETE (2026-09-09).** All eight original acceptance groups PASS. The existing final matrix completed **92/92 executions, 11,756 checks, zero failures/native error lines, exit 0**, including all ten air executions and the fresh-copy earned integration in both modes. No required M15 feature remains outstanding. Historical interface and movement findings remain separately open. No human keyboard-and-mouse playtest occurred.
 
 ## Play and configuration
 
@@ -69,7 +69,100 @@ All failed runs, source copies and stdout/stderr remain under `validation-output
 
 ## Validation and acceptance
 
-Pending final serial validation. Exact run totals, exit codes, eight acceptance statuses, source correspondence, reused results and inspected captures will be recorded here before handoff.
+The saved [process outcome](../validation-output/m15/matrix-process-outcome.json) records completion at **2026-09-09T19:45:23.5117805Z**, exit **0**. Its earlier `recovered_state: running` describes the observation before completion; the final `state` is `completed`. The [runner summary](../validation-output/m8/m15-final-matrix-01/summary.json) independently confirms all 92 planned tests finished. The response-stream disconnect was not a validation result. No process was identified by a reused PID, no duplicate test or waiting loop was started, and no reviewer was launched during this closeout.
+
+The existing invocation was:
+
+```powershell
+& .\tools\validate-m15.ps1 -RunName m15-final-matrix-01 -TimeoutSeconds 240
+```
+
+The [plan](../validation-output/m8/m15-final-matrix-01/plan.json) records the exact installed engine, PowerShell executable, 240-second external deadline for each execution, all arguments and fresh project path `validation-output/m8/m15-final-matrix-01/project`. The [results](../validation-output/m8/m15-final-matrix-01/results.json) preserve each command, wrapper call, elapsed time, checks and exit. Every one of the **93 execution records** (fresh import plus 92 tests) has exit 0, its `.ps1`, combined `.log`, `.stdout.log` and `.stderr.log`; all stderr files are empty. Import has no assertion count and is excluded from test totals. The runner reports 1087.795 seconds across executions.
+
+| Final matrix subset | Executions passed/completed/planned | Checks | Failures / native error lines | Exit |
+| --- | --- | --- | --- | --- |
+| Headless tests | 46 / 46 / 46 | 5,795 | 0 / 0 | All 0 |
+| Graphical tests | 46 / 46 / 46 | 5,961 | 0 / 0 | All 0 |
+| Full matrix | 92 / 92 / 92 | 11,756 | 0 / 0 | Aggregate 0 |
+
+| Air suite within the matrix | Headless checks | Graphical checks | Outcome |
+| --- | --- | --- | --- |
+| Flight | 52 | 55 | PASS, both exit 0 |
+| Combat | 85 | 85 | PASS, both exit 0 |
+| Production | 96 | 96 | PASS, both exit 0 |
+| Earned integration | 54 | 56 | PASS, both exit 0 |
+| Interface | 200 | 226 | PASS, both exit 0 |
+| Air subtotal, ten executions | 487 | 518 | 1,005 passing checks already included above |
+
+Both final [headless ledger](../validation-output/m8/m15-final-matrix-01/artifacts/headless-air_integration_checks/m15/earned-ledger.json) and [graphical ledger](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_integration_checks/m15/earned-ledger.json) reconcile **1000 + 2000 deposited − 2600 spent = 400** with correct ownership and conservation. The [headless integration wrapper log](../validation-output/m8/m15-final-matrix-01/headless-air_integration_checks.stdout.log) records 54 passing checks; the [graphical integration wrapper log](../validation-output/m8/m15-final-matrix-01/graphical-air_integration_checks.stdout.log) records 56. Fresh-copy import and both earned runs are complete, not inferred from development tests.
+
+### Original acceptance statuses
+
+| # | Original requirement | Status | Saved final evidence |
+| --- | --- | --- | --- |
+| 1 | Builder-created Airfield and paid helicopter production | PASS | Air production and earned integration: ordinary builder work, payment, FIFO, cancellation and real deployment. |
+| 2 | Real takeoff, bounded flight, and safe deployment | PASS | Flight and production: elevated gameplay body, real climb, obstacle traversal, speed/bounds, blocked volume, launch claims and exactly-once deployment. |
+| 3 | Ground/air targeting separation | PASS | Air combat plus existing combat/defense/attack-move suites: explicit commands, acquisition, emitter and impact eligibility; malformed-weapon atomic rejection remains intact. |
+| 4 | Helicopter combat and powered AA counter | PASS | Real delayed rocket damage, obstruction, powered AA aim/hits, shortage and cooldown restoration; earned aircraft damages ground battery and dies to AA. |
+| 5 | Power, destruction, callbacks, freeze, and Restart | PASS | Production/combat/UI and inherited lifecycle suites: source/target deletion, takeoff death, stale claims, owner grids, frozen results and viewport Restart. |
+| 6 | Mixed commands, groups, minimap, and readable interface | PASS | Air UI, flight, Attack Move UI, tactical interface and groups; domain-specific slots and prior source-matched visual inspections at both required sizes. The original M12 occurrence remains separately excepted. |
+| 7 | Real economic and combat integration | PASS | Both final earned runs, conserved 400-credit ledgers, paid aircraft rocket damage/AA death and ordinary Rifle movement/fire against enemy power. |
+| 8 | Preserved earlier systems and accurate validation reporting | PASS | All 92 final executions pass, including earlier regression suites; exact source correspondence, retained failures, current captures and saved documentation checks. No historical finding is closed by this matrix. |
+
+### Preserved execution inventory
+
+All 11 phase directories remain under `validation-output/m8/`; none was overwritten. Each phase retains its plan, source hashes/copy, results, summary and wrapper logs. Earlier counts are provenance and are **not added to the final 11,756**.
+
+| Phase | Tests passed/completed/planned | Checks / failures | Preserved failed executions |
+| --- | --- | --- | --- |
+| `m15-smoke-01` | 0 / 0 / 2 | No test summary | `import`: engine exit 0 but 16 native error lines; runner rejects import and does not start tests. |
+| `m15-smoke-02` | 0 / 0 / 2 | No test summary | `import`: engine exit 0 but 20 native error lines; runner rejects import and does not start tests. |
+| `m15-smoke-03` | 2 / 3 / 3 | 285 / 1 | `headless-air_combat_checks`: 84 checks, one failure/native error line, exit 1. |
+| `m15-visual-dev-01` | 2 / 2 / 2 | 225 / 0 | None; early visual evidence predates final corrections. |
+| `m15-affected-dev-01` | 12 / 13 / 13 | 2,035 / 2 | `headless-combat_checks`: 183 checks, two failures/native error lines, exit 1. |
+| `m15-recovery-core-01` | 3 / 5 / 5 | 423 / 0 | `headless-air_production_checks` and `headless-air_integration_checks`: parse failures, no test summary, both exit 1; four native error lines total. |
+| `m15-recovery-economy-02` | 1 / 2 / 2 | 146 / 2 | `headless-air_production_checks`: 92 checks, two failures, exit 1. |
+| `m15-production-timing-diagnostic-01` | 0 / 1 / 1 | 92 / 2 | `headless-air_production_checks`: unchanged timing failures, exit 1. |
+| `m15-recovery-features-03` | 10 / 12 / 12 | 1,379 / 4 | `headless-air_ui_checks` (200 checks) and `graphical-air_ui_checks` (226): two layout failures each, both exit 1. |
+| `m15-recovery-ui-04` | 2 / 2 / 2 | 426 / 0 | None; corrected interface and inspected captures match final tested source. |
+| `m15-final-matrix-01` | 92 / 92 / 92 | 11,756 / 0 | None; fresh import also passes. |
+
+The supported explanations and corrections are recorded above. The two demonstrated new regressions were malformed-weapon batch acceptance and the 720p full-queue overlap; both have final-source passing coverage. There is no outstanding M15 feature failure or unknown-attribution failure in the final matrix. Earlier native-error and parse failures remain failed even when their engine exit or assertion count alone looked successful.
+
+### Tested-source correspondence and reused evidence
+
+Before closeout documentation edits, all **354/354 current files** matched the final [SHA-256 manifest](../validation-output/m8/m15-final-matrix-01/source-hashes.json), with no missing or added source files. The final runner also recorded zero source differences after execution. The `m15-recovery-ui-04` manifest is identical to the final matrix manifest, so its already-inspected corrected captures remain current. Earlier visual-development captures predate the fixes and are retained as development history rather than used to certify the final layout.
+
+Only `README.md`, `docs/roadmap.md` and this report changed during closeout. Runtime, resources, scenes, tests and tools remain exactly as tested. The [final handoff check record](../validation-output/m15/final-handoff-checks.json) records current hashes, differences for every retained phase, snapshot integrity, screenshot dimensions/hashes, documentation links/anchors and `git diff --check`. The supplemental [documentation whitespace record](../validation-output/m15/documentation-whitespace-checks.json) includes this untracked report, which ordinary `git diff --check` alone does not cover. These static checks pass; only the three handoff documents differ from the final matrix snapshot. Saved source copies were not modified.
+
+This closeout reused the completed matrix, earned ledgers and prior visual observations. It ran no engine tests, screenshot reviews or post-matrix affected reruns. The earlier focused results corroborate corrections but are not extra unique coverage beyond the matrix. The baseline commit remains `18938abfd33c82aaac80395ea40753281201c1c6`; implementation and documentation remain uncommitted.
+
+### Screenshots and visual handoff
+
+The following **ten already-inspected current-source captures** are reused. Paths point to the exact observed artifacts, not substituted captures from a later execution. Recovery UI 04 and the final matrix have identical source manifests.
+
+| Prior inspected capture | Resolution | Handoff coverage |
+| --- | --- | --- |
+| [Corrected full production queue and Help](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_paid_production_help_1280x720.png) | 1280×720 | All five paid jobs fit above minimap; Help and controls remain readable. |
+| [Selected AA and Help](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_paid_selected_aa_help_1280x720.png) | 1280×720 | AA status/power and contextual controls. |
+| [Recovery result](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_result_1920x1080.png) | 1920×1080 | Visible result and Restart. |
+| [Normal builder and Help](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_normal_builder_help_1920x1080.png) | 1920×1080 | Normal opening, priced construction choices and expanded Help. |
+| [Selected helicopter](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_paid_selected_helicopter_1280x720.png) | 1280×720 | Selection feedback, aircraft status and minimap clarity. |
+| [Selected AA](../validation-output/m8/m15-recovery-ui-04/artifacts/graphical-air_ui_checks/m15/screenshots/air_paid_selected_aa_1920x1080.png) | 1920×1080 | AA marker/status and larger layout. |
+| [Final normal builder, 720p](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_ui_checks/m15/screenshots/air_normal_builder_1280x720.png) | 1280×720 | Normal scene configuration and collapsed Help layout. |
+| [Final normal builder, 1080p](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_ui_checks/m15/screenshots/air_normal_builder_1920x1080.png) | 1920×1080 | Normal scene configuration and collapsed Help layout. |
+| [Final result, 720p](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_ui_checks/m15/screenshots/air_result_1280x720.png) | 1280×720 | Result and accessible Restart. |
+| [Final result, 1080p](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_ui_checks/m15/screenshots/air_result_1920x1080.png) | 1920×1080 | Result and accessible Restart. |
+
+The final UI artifact directory `validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_ui_checks/m15/screenshots/` retains **26 UI-authored captures**: normal builder, placement preview, paid production, selected helicopter, selected AA and normal Restart, each at 1280×720 and 1920×1080 with Help collapsed/expanded, plus results at both sizes. Its additional `air_earned_ground_power_attack_1280x720.png` is a copied integration artifact, not another UI test or independent visual review. The capture inventory in the final static record includes all 27 files and their dimensions. Automated UI checks verify picking, mixed controls, groups, minimap markers, full-queue bounds, viewport Restart and restored normal opening; rendered captures do not certify the earned ledger or human playtesting.
+
+Earned graphical evidence separately includes [real rocket ground damage](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_integration_checks/m15/screenshots/air_earned_ground_damage_1280x720.png) and [ordinary ground power attack](../validation-output/m8/m15-final-matrix-01/artifacts/graphical-air_integration_checks/m15/screenshots/air_earned_ground_power_attack_1280x720.png), both 1280×720. Their saved integration assertions and ledgers establish the gameplay claims; no new screenshot inspection was needed at closeout.
+
+### Historical exceptions and deferred findings
+
+**Accepted historical interface exception:** the [original M12 group-3 occurrence](milestone-12.md#owner-authorized-interface-exception--2026-09-09) remains **OPEN / UNKNOWN**, with its criterion 7 **NOT VERIFIED**. Current mixed commands, Attack Move UI and control groups pass, but do not reconstruct or repair that occurrence.
+
+**Deferred movement findings:** [movement issue records](movement-issue-records.md) remain **UNRESOLVED**. M14's graphical unit-7 stress execution, earlier failed movement runs and their unknown attribution are preserved. This matrix's passing movement checks do not close those failures or establish full historical movement acceptance. Neither historical investigation was reopened.
 
 ## Important files and limitations
 
