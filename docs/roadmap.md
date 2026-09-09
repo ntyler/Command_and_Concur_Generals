@@ -135,6 +135,12 @@ Single-piece placement, manual gates, no repairs and no general multilayer siege
 
 **Next planned feature: the buildable superweapon facility.** It is not implemented during this closeout.
 
+### Superweapon facility — scope definition pending
+
+The 2026-09-09 development continuation confirmed that the roadmap names this feature but supplies no milestone identifier, detailed facility/weapon behavior, scope boundaries or acceptance criteria. None were found in the supporting repository documentation. Those requirements must be supplied before implementation under the owner's instruction not to invent scope or assume a milestone number; M16's movement deferral remains applicable and is not the blocker.
+
+Before any implementation changes, `superweapon-facility-baseline-01` passed a fresh import and the existing headless construction and builder suites: **271 + 314 = 585 checks, zero failures/native-error lines, all exits and aggregate exit 0**. These are focused baseline observations of existing construction, navigation and builder behavior, not verification of a superweapon facility or full movement acceptance. No graphical suite or movement-stress suite was executed in this continuation. The [saved baseline report](superweapon-facility-baseline.md) records the exact command, source snapshot, results and missing definition. **Facility implementation: NOT STARTED; feature verification: NOT VERIFIED; acceptance of the completed feature: NOT ASSESSED.** M16 remains accepted for continued development, with group 7 NOT VERIFIED and both original and corrected-preview evidence preserved separately.
+
 ## Baseline and validation provenance
 
 The working tree was clean at the start of the original priority update, at commit `d5fc444`. At that baseline, `scripts/rts_unit.gd` SHA-256 was `2f46d67b3267ab233405457f8c84e83ebc46b8f461e75deef46ee5c3f33b34d0`, matching final source in the [latest gate repair report](milestone-5-gate-repair.md). Current M12 source correspondence is recorded in the [M12 handoff](milestone-12.md#reused-evidence-and-final-tested-source-correspondence).
