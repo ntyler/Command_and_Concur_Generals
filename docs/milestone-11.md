@@ -1,10 +1,18 @@
 # Milestone 11 — Supply Depots and Collector production
 
-Status: implementation integrated; validation in progress. This saved report will be finalized after the required checks. No human playtest has occurred.
+Status: **COMPLETE for Milestone 11 feature requirements.** All eight original feature acceptance groups below pass. The completed final matrix is **not passing**: 63 of 64 executions passed, with 8,110 checks and three failures in the headless projection fixture, phase exit 1. Movement regression acceptance remains unresolved with unknown failure attribution. No outstanding depot requirement remains. No human playtest has occurred.
 
 ## Playable scene
 
 Open [supply_depot_assault.tscn](../scenes/supply_depot_assault.tscn) in Godot 4.7.2 and press F6, or run the installed console executable with `--path . res://scenes/supply_depot_assault.tscn`. F5 retains the original main scene.
+
+Exact playable launch from PowerShell:
+
+```powershell
+Set-Location -LiteralPath 'D:\GitHub\Command_and_Concur_Generals'
+$godot = 'C:\Users\Tyler\AppData\Local\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe'
+& $godot --path . res://scenes/supply_depot_assault.tscn
+```
 
 The scene inherits the economy assault composition. Select the owned HQ, choose Build Supply Depot, and place on clear ground. A completed depot receives cargo into the existing owner wallet and trains the existing unarmed Collector Truck. New collectors use ordinary ground rally and require a player supply assignment. The original enemy economy and HQ objective remain.
 
@@ -31,16 +39,18 @@ Reuse preserves M10's **60 completed executions, 59 passing, 7,393 assertions, t
 
 ## Acceptance
 
-| Required group | Status |
+| Required group | Status and final evidence |
 | --- | --- |
-| 1. Buildable depot and preserved HQ compatibility | NOT VERIFIED |
-| 2. Owner-correct, route-aware drop-off selection | NOT VERIFIED |
-| 3. Exactly-once deposits and bounded invalidation | NOT VERIFIED |
-| 4. Collector production and safe deployment | NOT VERIFIED |
-| 5. Destruction, callbacks, freeze and Restart | NOT VERIFIED |
-| 6. Real earned depot-to-collector-to-army integration | NOT VERIFIED |
-| 7. Preserved enemy economy and existing interface | NOT VERIFIED |
-| 8. Focused/integration validation and accurate reporting | NOT VERIFIED |
+| 1. Buildable depot and preserved HQ compatibility | **PASS** — depot placement, paid construction, cancellation/navigation restoration and completion; original HQ-only harvesting and construction suites pass in both modes. |
+| 2. Owner-correct, route-aware drop-off selection | **PASS** — owned operational membership, navigation-cost ordering despite geometric proximity, stable ties, retained valid targets and explicit manual target behavior pass in both modes. |
+| 3. Exactly-once deposits and bounded invalidation | **PASS** — real trips conserve cargo/wallets, commitment revalidates eligibility/geometry, synchronous callbacks cannot replay transfers, and automatic replacement is bounded with safe cargo retention. |
+| 4. Collector production and safe deployment | **PASS** — ordinary paid FIFO queue, unchanged Collector configuration, full captured refunds, blocked-exit retention, clearance, exactly-one deployment and rejected-rally handling pass. |
+| 5. Destruction, callbacks, freeze and Restart | **PASS** — depot destruction/cleanup, stale references, callback replacement/removal, frozen orders/queues/transfers/sites and clean Restart pass; saved added lifecycle captures inspected. |
+| 6. Real earned depot-to-collector-to-army integration | **PASS** — 80 headless / 81 graphical checks; zero-credit start, earned depot and Collector, Collector-funded deployed Rifle, exact ledger and controlled shorter depot route/delivery all pass. |
+| 7. Preserved enemy economy and existing interface | **PASS** — enemy economy 96/98, enemy integration 33/34, existing HUD/tactical/groups, production/harvesting/construction and match-result suites pass; valid existing viewport evidence reused. |
+| 8. Focused/integration validation and accurate reporting | **PASS** — fresh import, all 64 required executions, source correspondence, saved visual review and documentation checks completed; exact totals and the failed movement execution are retained below. This accepts validation/reporting completion, not a passing full regression matrix. |
+
+The final depot suites pass **272 headless / 284 graphical** checks; earned integration passes **80 / 81**. Their **717 checks are included in 8,110**, not added to it. Earlier focused runs remain historical evidence and are not counted again. Full movement and full Milestone 5 regression acceptance remain **NOT ACCEPTED / UNRESOLVED**; neither feature completion nor the passing graphical counterpart establishes the cause or repair of the failed execution.
 
 ## Retained execution history
 
@@ -111,9 +121,9 @@ Owner-isolated enemy commands, feedback and wallet handling remain unchanged. De
 - [ConstructionPanel](../scripts/construction_panel.gd), [ProductionPanel](../scripts/production_panel.gd), [HarvestPanel](../scripts/harvest_panel.gd), [Help](../scripts/rts_help_panel.gd) and [minimap](../scripts/tactical_minimap.gd) expose priced construction, Collector queues, current cargo/drop-off and depot markers.
 - [Focused checks](../tests/supply_depot_checks.gd) and [earned integration](../tests/supply_depot_integration_checks.gd) cover the feature and real economic chain using existing test infrastructure.
 
-## Final validation in progress
+## Completed final validation
 
-The single final expanded matrix is running as [m11-final-matrix-01](../validation-output/m8/m11-final-matrix-01/plan.json): 31 suite names plus the existing gate-avoidance variant in each mode, **64 planned test executions**, preceded by fresh-copy import. It covers all 60 M10 regression executions plus four M11 executions. Every command uses the installed Godot 4.7.2, the existing `tools/run-godot.ps1` 240-second external timeout and fixed 60 simulation FPS; graphical commands omit `--headless`. No engine or dependency installation/upgrade occurred.
+The single final expanded matrix completed as [m11-final-matrix-01](../validation-output/m8/m11-final-matrix-01/plan.json): 31 suite names plus the existing gate-avoidance variant in each mode, **64 completed test executions**, preceded by successful fresh-copy import. It covers all 60 M10 regression executions plus four M11 executions. Every test command uses the installed Godot **4.7.2.stable.official.ed1daf0bf**, the existing `tools/run-godot.ps1` **240-second external timeout** and **fixed 60 simulation FPS**; graphical commands omit `--headless`. No engine or dependency installation/upgrade occurred.
 
 Exact launched PowerShell command from the repository root:
 
@@ -121,4 +131,87 @@ Exact launched PowerShell command from the repository root:
 & 'C:\Users\Tyler\AppData\Local\Microsoft\WindowsApps\pwsh.exe' -NoProfile -ExecutionPolicy Bypass -File 'validation-output\m11\run-final-matrix.ps1' *> 'validation-output\m11\final-matrix-wrapper.log'
 ```
 
-The [saved invocation](../validation-output/m11/run-final-matrix.ps1) supplies the complete suite list to `tools/validate-m8.ps1 -RunName 'm11-final-matrix-01' -TimeoutSeconds 240 -Modes @('headless', 'graphical') -Suites $suites`. Its [plan](../validation-output/m8/m11-final-matrix-01/plan.json) records every actual engine argument; [results](../validation-output/m8/m11-final-matrix-01/results.json) record exact shell commands, wrapper calls, totals and exits. Each result's sibling `<label>.ps1`, `.log`, `.stdout.log` and `.stderr.log` is retained in that directory. [Outer wrapper log](../validation-output/m11/final-matrix-wrapper.log) and the brief [progress note](../validation-output/m11/progress.md) protect against another response disconnect. Final phase totals, source correspondence, screenshots, failure classification and handoff checks will be saved below when the run finishes.
+The [saved invocation](../validation-output/m11/run-final-matrix.ps1) supplies the complete suite list to `tools/validate-m8.ps1 -RunName 'm11-final-matrix-01' -TimeoutSeconds 240 -Modes @('headless', 'graphical') -Suites $suites`. Its [plan](../validation-output/m8/m11-final-matrix-01/plan.json) records every actual engine argument; [results](../validation-output/m8/m11-final-matrix-01/results.json) record exact shell commands, wrapper calls, totals and exits. Each result's sibling `<label>.ps1`, `.log`, `.stdout.log` and `.stderr.log` is retained in that directory. The [summary](../validation-output/m8/m11-final-matrix-01/summary.json), [outer wrapper log](../validation-output/m11/final-matrix-wrapper.log) and [saved phase exit](../validation-output/m11/final-matrix-exit.txt) agree on completion and failure. The run took **841.794 seconds** including import; the saved result timestamps fall on September 8, 2026 locally (September 9 UTC).
+
+| Final scope | Completed / planned | Passing executions | Checks | Failures | Exit |
+| --- | --- | --- | --- | --- | --- |
+| Fresh-copy import (separate from test totals) | 1 / 1 | 1 | 0 | 0 | 0 |
+| Headless tests | 32 / 32 | 31 | 4,013 | 3 | one 1; remaining 0 |
+| Graphical tests | 32 / 32 | 32 | 4,097 | 0 | all 0 |
+| **Single final test matrix** | **64 / 64** | **63** | **8,110** | **3** | **phase 1** |
+
+The runner reports **three native/error lines**, all the explicit `ERROR: FAIL:` assertion reports in the failed projection execution. No additional native errors, timeout or incomplete execution is recorded. The three failures are included in the 8,110 checks (8,107 successful checks).
+
+| Suite | Headless checks / failures | Graphical checks / failures | Headless / graphical exit |
+| --- | --- | --- | --- |
+| attack_move_batch_checks | 155 / 0 | 155 / 0 | 0 / 0 |
+| attack_move_checks | 124 / 0 | 124 / 0 | 0 / 0 |
+| attack_move_ui_checks | 91 / 0 | 94 / 0 | 0 / 0 |
+| base_assault_checks | 124 / 0 | 130 / 0 | 0 / 0 |
+| boundary_neighbor_checks | 23 / 0 | 23 / 0 | 0 / 0 |
+| boundary_neighbor_controls | 193 / 0 | 193 / 0 | 0 / 0 |
+| captured_parked_cluster_checks | 10 / 0 | 10 / 0 | 0 / 0 |
+| combat_checks | 183 / 0 | 191 / 0 | 0 / 0 |
+| combat_load | 7 / 0 | 7 / 0 | 0 / 0 |
+| combat_repair_checks | 230 / 0 | 230 / 0 | 0 / 0 |
+| construction_checks | 267 / 0 | 270 / 0 | 0 / 0 |
+| construction_cleanup_checks | 46 / 0 | 46 / 0 | 0 / 0 |
+| control_group_checks | 82 / 0 | 82 / 0 | 0 / 0 |
+| enemy_economy_checks | 96 / 0 | 98 / 0 | 0 / 0 |
+| enemy_economy_integration_checks | 33 / 0 | 34 / 0 | 0 / 0 |
+| gate_movement_checks | 14 / 0 | 14 / 0 | 0 / 0 |
+| gate_movement_checks-avoidance | 39 / 0 | 39 / 0 | 0 / 0 |
+| harvesting_checks | 298 / 0 | 299 / 0 | 0 / 0 |
+| hud_clarity_checks | 197 / 0 | 209 / 0 | 0 / 0 |
+| line_of_fire_checks | 305 / 0 | 308 / 0 | 0 / 0 |
+| milestone_checks | 127 / 0 | 131 / 0 | 0 / 0 |
+| movement_repair_checks | 82 / 0 | 82 / 0 | 0 / 0 |
+| movement_stress_checks | 122 / 0 | 131 / 0 | 0 / 0 |
+| parked_deadlock_checks | 14 / 0 | 14 / 0 | 0 / 0 |
+| parked_deadlock_controls | 84 / 0 | 84 / 0 | 0 / 0 |
+| production_checks | 192 / 0 | 193 / 0 | 0 / 0 |
+| **projection_step_checks** | **32 / 3** | **32 / 0** | **1 / 0** |
+| spherical_projectile_checks | 140 / 0 | 141 / 0 | 0 / 0 |
+| supply_depot_checks | 272 / 0 | 284 / 0 | 0 / 0 |
+| supply_depot_integration_checks | 80 / 0 | 81 / 0 | 0 / 0 |
+| tactical_interface_checks | 126 / 0 | 138 / 0 | 0 / 0 |
+| vehicle_production_checks | 225 / 0 | 230 / 0 | 0 / 0 |
+
+## Retained failed movement execution — attribution UNKNOWN
+
+The only failed execution is [headless-projection_step_checks](../validation-output/m8/m11-final-matrix-01/headless-projection_step_checks.log), **32 checks / three failures / exit 1**. The exact [invocation](../validation-output/m8/m11-final-matrix-01/headless-projection_step_checks.ps1), [stderr](../validation-output/m8/m11-final-matrix-01/headless-projection_step_checks.stderr.log) and [fixture result artifact](../validation-output/m8/m11-final-matrix-01/artifacts/headless-projection_step_checks/full-sequence-result.json) are retained with the complete recorder artifacts.
+
+The saved log records unit **41**, natural order **2**, state **FAILED**, **eight recoveries**, elapsed **32.25 simulated seconds**, position `(24.757984, 0, 18.849998)` and assigned goal `(28.5, 0, 17.5)`. Movement retries were exhausted. The three failed assertions are:
+
+1. `unit13 cluster: all 50 participants actually arrive within original tolerance`
+2. `unit13 cluster: original 180-tick settling and minimum separation > .6`
+3. `projection fixture: unit41 actually arrives at its exact accepted goal on natural order2`
+
+The observed actor 13 arrives, all units terminate before the unchanged 75-second fixture deadline, command authority and navigation/solid bounds pass, and projection step-size bounds pass. The graphical projection execution and both movement-stress executions pass. These facts do not establish this failure as pre-existing, newly introduced or repaired. Attribution remains **UNKNOWN** (the saved results label it `UNASSESSED`). No failed-run retry or movement investigation was performed during this handoff. Earlier movement failures remain retained separately.
+
+## Saved visual evidence
+
+The existing [focused-02 depot screenshots](../validation-output/m8/m11-focused-02/artifacts/graphical-supply_depot_checks/m11/screenshots) remain valid presentation evidence: HQ and depot queue at 1280×720 and 1920×1080, placement preview, collector manual return, and expanded Help at both sizes. Their runtime matches the final snapshot; the subsequent depot-test changes only added four capture hooks and selected the construction site before its capture. These valid inspected views are reused without replay. The final matrix also retains [depot captures](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_checks/m11/screenshots) and the [earned depot/Collector/Rifle capture](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_integration_checks/m11_earned_depot_collector_rifle_1280x720.png). Integration acceptance uses the corrected final execution and ledger, not the earlier failed timing comparison.
+
+Only the four outstanding added 1280×720 captures were inspected during this closure:
+
+| Existing capture | Observed visual result |
+| --- | --- |
+| [Blocked Collector exit](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_checks/m11/screenshots/collector_exit_blocked_1280x720.png) | Selected 450/450-HP depot, Collector job at 100%, readable Exit blocked and Cancel, trucks occupying exits. |
+| [Unfinished depot](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_checks/m11/screenshots/depot_construction_1280x720.png) | Selected site, 300-credit payment/refund terms, Constructing 0%, full-refund Cancel, gold site and `+` minimap marker. |
+| [Match result](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_checks/m11/screenshots/depot_match_result_1280x720.png) | Centered readable VICTORY, result explanation and Restart. |
+| [Restarted scene](../validation-output/m8/m11-final-matrix-01/artifacts/graphical-supply_depot_checks/m11/screenshots/depot_restart_1280x720.png) | Result overlay absent; selected 1200/1200-HP HQ, 1000 credits and all three building choices, including Supply Depot at 300 credits / 10 seconds; previous depot/site absent. |
+
+Panels and controls fit the captured viewport without clipped panel text or unintended panel overlap. Small world labels are partly occluded by geometry/nearby objects; selected details remain readable. Static captures establish appearance; saved automated checks establish behavior. No new captures or human playtest were needed.
+
+## Final source correspondence and handoff checks
+
+This closure began with a clean working tree at existing HEAD `b2602a5f504179d36921bb544df10c98be04ce8a`; current status and diff were read before editing. The matrix's [revision](../validation-output/m8/m11-final-matrix-01/revision.txt) is the earlier `b7ab26e9d8fafb5782ec926a4bdc66becc83486e`, accompanied by its [starting status](../validation-output/m8/m11-final-matrix-01/starting-status.txt) and [implementation diff](../validation-output/m8/m11-final-matrix-01/starting-diff.patch). The tested implementation is established by the actual source snapshot, not that earlier commit alone.
+
+All **282 saved source files** match [source-hashes.json](../validation-output/m8/m11-final-matrix-01/source-hashes.json) byte for byte. The current nonignored source list has exactly the same 282 paths, with no additions or omissions. Only `README.md`, `docs/roadmap.md` and this report differ from the snapshot; **all runtime, scenes, resources, tests and tools match exactly**. The final snapshot therefore remains applicable. The runner's at-completion difference list named only this report; the other two documents were updated later.
+
+The closure changes only these three handoff documents. Missing local documentation-link/anchor checks and `git diff --check` pass; their exact check script and results are saved in [handoff-checks.ps1](../validation-output/m11/handoff-checks.ps1) and [handoff-checks.json](../validation-output/m11/handoff-checks.json), alongside the source comparison. No Godot launch, test rerun, implementation change, upgrade, commit, or removal of retained evidence occurred during closure.
+
+## Next feature — Milestone 12 builders, before power
+
+The [roadmap](roadmap.md#next-focused-feature--builder-driven-construction) schedules **Milestone 12 — Bulldozers and builder-driven construction**, before power generation. HQ produces Bulldozers; selecting one exposes building choices; it travels to a valid work position; only an eligible assigned working builder advances construction. Move, Stop or builder loss pauses the site, and another owned Bulldozer can resume it. Supply Depots produce Supply Trucks/Collectors, which harvest and deliver and do not construct. This is scheduled, **not implemented**. The current depot and earlier-scene behavior remain unchanged by the M11 handoff.
