@@ -4,6 +4,8 @@ extends PanelContainer
 
 var field: ProductionField
 var credit_label: Label
+var power_label: Label
+var power_warning: Label
 var identity_label: Label
 var selection_details: Label
 var context_content: VBoxContainer
@@ -18,6 +20,8 @@ var _observed: UnitProduction
 var _observed_actor: WeakRef
 var _context_connections: Array[Dictionary] = []
 var _closing: bool = false
+var _refresh_revision: int = 0
+var _observed_grid: PowerGrid
 
 
 func _ready() -> void:
@@ -36,6 +40,12 @@ func _ready() -> void:
 	add_child(column)
 	credit_label = _label(column, "")
 	credit_label.add_theme_color_override("font_color", Color("ffce78"))
+	power_label = _label(column, "")
+	power_label.add_theme_font_size_override("font_size", 14)
+	power_warning = _label(column, "LOW POWER · Barracks/Factory production %d%%" % roundi(PowerGrid.LOW_POWER_RATE * 100.0))
+	power_warning.add_theme_font_size_override("font_size", 14)
+	power_warning.add_theme_color_override("font_color", Color("ffce78"))
+	power_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	identity_label = _label(column, "")
 	identity_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	context_content = VBoxContainer.new()
@@ -75,6 +85,9 @@ func _ready() -> void:
 	field.selection.selection_changed.connect(_selection_changed)
 	field.selection.attack_move_targeting_changed.connect(_refresh)
 	field.credits.changed.connect(_credits_changed)
+	if field.power_enabled:
+		_observed_grid = field.power_grid
+		_observed_grid.changed.connect(_refresh)
 	get_viewport().size_changed.connect(_layout)
 	minimum_size_changed.connect(_layout)
 	_refresh()
@@ -107,10 +120,17 @@ func _credits_changed(_owner: int) -> void:
 func _refresh() -> void:
 	if not _context_active():
 		return
+	_refresh_revision += 1
+	var revision := _refresh_revision
+	var snapshot: Dictionary = field.power_snapshot(field.selection.friendly_owner_id) if field.power_enabled else {}
+	# Eligibility pruning may notify synchronously, change selection, or remove
+	# this field. A nested refresh already owns the newer display in that case.
+	if not _refresh_current(revision):
+		return
 	var building := field.selection.selected_building()
 	var units := field.selection.selected_units()
 	# Pruning can synchronously notify a departing field before returning.
-	if not _context_active():
+	if not _refresh_current(revision):
 		return
 	_observe_context(building if building != null else (units[0] if units.size() == 1 else null))
 	var producer: UnitProduction = building.production if building != null else null
@@ -121,7 +141,18 @@ func _refresh() -> void:
 		if _observed != null:
 			_observed.changed.connect(_refresh)
 	credit_label.text = "Credits  %d" % field.credits.balance(field.selection.friendly_owner_id)
+	power_label.visible = field.power_enabled
+	power_warning.visible = field.power_enabled and bool(snapshot.get("low_power", false))
+	if field.power_enabled:
+		power_label.text = "Power: %d generated / %d required" % [snapshot.generated, snapshot.required]
 	_show_selection(building, units)
+	if building != null and field.power_enabled and building.definition != null:
+		if building.kind == RTSBuilding.Kind.POWER_PLANT:
+			var contribution := field.power_grid.contribution(building)
+			selection_details.text += ("" if selection_details.text.is_empty() else "\n") + "Generation: %d power" % contribution.generated
+		elif building.definition.power_required > 0:
+			selection_details.text += "\nPower required: %d · Production rate: %d%%" % [building.definition.power_required, roundi(float(snapshot.multiplier) * 100.0)]
+		selection_details.visible = not selection_details.text.is_empty()
 	attack_move_button.visible = field.selection.has_attack_move_selection()
 	attack_move_button.disabled = field.selection.attack_move_targeting
 	attack_move_hint.visible = field.selection.attack_move_targeting
@@ -140,7 +171,10 @@ func _refresh() -> void:
 		_layout.call_deferred()
 		return
 	var recipe := building.recipe
-	train_button.text = "Train %s · %d cr · %s s" % [recipe.display_name, recipe.credit_cost, str(recipe.training_duration)] if recipe != null else "No recipe"
+	var duration_label := "%s s" % str(recipe.training_duration) if recipe != null else ""
+	if field.power_enabled and building.definition != null and building.definition.power_required > 0:
+		duration_label += " base"
+	train_button.text = "Train %s · %d cr · %s" % [recipe.display_name, recipe.credit_cost, duration_label] if recipe != null else "No recipe"
 	train_button.disabled = not producer.is_available() or recipe == null or producer.count() >= building.queue_capacity or field.credits.balance(building.owner_id) < recipe.credit_cost
 	feedback.text = producer.message
 	if producer.count() >= building.queue_capacity:
@@ -327,10 +361,18 @@ func _context_active() -> bool:
 	return not _closing and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion() and is_instance_valid(field.selection) and field.selection.is_inside_tree()
 
 
+func _refresh_current(revision: int) -> bool:
+	return _context_active() and revision == _refresh_revision
+
+
 func _exit_tree() -> void:
 	# Deferred layouts may outlive tree membership. Detach the long-lived
 	# viewport as well as model signals before child teardown emits more changes.
 	_closing = true
+	_refresh_revision += 1
+	if _observed_grid != null and _observed_grid.changed.is_connected(_refresh):
+		_observed_grid.changed.disconnect(_refresh)
+	_observed_grid = null
 	if get_viewport().size_changed.is_connected(_layout):
 		get_viewport().size_changed.disconnect(_layout)
 	if minimum_size_changed.is_connected(_layout):

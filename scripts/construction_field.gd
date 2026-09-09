@@ -7,6 +7,7 @@ const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -
 @export var construction_definition: ConstructionDefinition = load("res://construction/barracks.tres")
 @export var vehicle_factory_definition: ConstructionDefinition
 @export var supply_depot_definition: ConstructionDefinition
+@export var power_plant_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
 @export var builder_construction_enabled: bool = false
 @export_range(0.85, 2.0, 0.05) var builder_work_distance: float = 1.3
@@ -101,7 +102,7 @@ func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVec
 
 
 func supports_construction(definition: ConstructionDefinition) -> bool:
-	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition)
+	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition or definition == power_plant_definition)
 
 
 func builder_work_positions(rectangle: Rect2) -> Array[Dictionary]:
@@ -181,6 +182,9 @@ func protected_areas() -> Array[Rect2]:
 	for site in construction.sites.values():
 		if site.state in [ConstructionSite.State.CANCELLING, ConstructionSite.State.CANCELLED]:
 			continue
+		var body: RTSBuilding = site.building()
+		if is_instance_valid(body) and body.kind == RTSBuilding.Kind.POWER_PLANT:
+			continue # Generators have builder access, but no unit-deployment exit.
 		# Protect the entire fixed six-sample exit neighborhood, plus the link from
 		# the door. This is geometry protection, not a center-point test.
 		rectangles.append(exit_area(site.rectangle))
@@ -214,13 +218,14 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 	for protected in protected_areas():
 		if clear.intersects(protected, true):
 			return "Protected deposit, supply, exit or access corridor"
-	# A new production building must have a clear usable exit; later sites protect it.
-	var exit_rectangle := exit_area(rectangle)
-	if not BUILD_AREA.encloses(exit_rectangle):
-		return "%s exit must fit inside the construction area" % definition.display_name()
-	for occupied in obstacles:
-		if exit_rectangle.intersects(occupied.grow(CLEARANCE), true):
-			return "%s exit would be obstructed" % definition.display_name()
+	# Generators have no production exit; all producers retain their existing checks.
+	if definition.kind != RTSBuilding.Kind.POWER_PLANT:
+		var exit_rectangle := exit_area(rectangle)
+		if not BUILD_AREA.encloses(exit_rectangle):
+			return "%s exit must fit inside the construction area" % definition.display_name()
+		for occupied in obstacles:
+			if exit_rectangle.intersects(occupied.grow(CLEARANCE), true):
+				return "%s exit would be obstructed" % definition.display_name()
 	if definition.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
 		# The same layout drives delivery, placement and future protected access.
 		# Existing units can leave a bay normally; fixed geometry cannot cover it.

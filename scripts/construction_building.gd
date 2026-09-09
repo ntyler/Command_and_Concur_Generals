@@ -29,5 +29,7 @@ func refresh_construction() -> void:
 					material.albedo_color = Color("c9a468") if child.position.y > building_height else Color("687b9b")
 				elif kind == Kind.SUPPLY_DEPOT:
 					material.albedo_color = Color("dfbc70") if child.position.y > building_height else Color("477a69")
+				elif kind == Kind.POWER_PLANT:
+					material.albedo_color = Color("f4d779") if child.position.y > building_height * 0.55 else Color("566b91")
 				else:
 					material.albedo_color = Color("547c83")

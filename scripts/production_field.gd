@@ -8,6 +8,8 @@ const STARTS: Array[Vector3] = [Vector3(-21, 0, 13), Vector3(-18, 0, 13), Vector
 const SPAWN_OFFSETS: Array[Vector3] = [Vector3.ZERO, Vector3(0, 0, -1.1), Vector3(0, 0, 1.1), Vector3(1.1, 0, 0), Vector3(1.1, 0, -1.1), Vector3(1.1, 0, 1.1)]
 
 @export var starting_credits: int = 1000
+@export var power_enabled: bool = false
+var power_grid: PowerGrid
 var credits: PlayerCredits
 var headquarters: RTSBuilding
 var barracks: RTSBuilding
@@ -25,6 +27,7 @@ var _spawn_claim_radii: Array[float] = []
 
 func _ready() -> void:
 	credits = create_credits()
+	power_grid = PowerGrid.new(self)
 	_spawn_query = PhysicsShapeQueryParameters3D.new()
 	_spawn_query.shape = RTSUnit.body_shape()
 	_spawn_query.collision_mask = 2 | 4 | LineOfFire.BLOCKER_MASK
@@ -59,6 +62,21 @@ func create_production_panel() -> ProductionPanel:
 
 func dropoff_command_hint() -> String:
 	return "HQ"
+
+
+func refresh_power() -> void:
+	if power_grid != null:
+		power_grid.refresh()
+
+
+func power_snapshot(owner_id: int) -> Dictionary:
+	return power_grid.snapshot(owner_id) if power_grid != null else {"generated": 0, "required": 0, "low_power": false, "multiplier": 1.0}
+
+
+func production_multiplier(building: RTSBuilding) -> float:
+	if not power_enabled or not is_instance_valid(building) or building.kind not in [RTSBuilding.Kind.BARRACKS, RTSBuilding.Kind.VEHICLE_FACTORY]:
+		return 1.0
+	return power_snapshot(building.owner_id).multiplier
 
 
 func set_movement_debug(enabled: bool) -> void:
@@ -114,6 +132,12 @@ func register_building(building: RTSBuilding) -> void:
 	if _closing or not is_instance_valid(building) or not is_ancestor_of(building) or building.is_queued_for_deletion() or not building.is_alive():
 		return
 	building.gameplay_field = self
+	if building.definition == null:
+		match building.kind:
+			RTSBuilding.Kind.BARRACKS: building.definition = load("res://construction/barracks.tres")
+			RTSBuilding.Kind.VEHICLE_FACTORY: building.definition = load("res://construction/vehicle_factory.tres")
+			RTSBuilding.Kind.SUPPLY_DEPOT: building.definition = load("res://construction/supply_depot.tres")
+			RTSBuilding.Kind.POWER_PLANT: building.definition = load("res://construction/power_plant.tres")
 	building.set_movement_debug(movement_debug)
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
@@ -125,6 +149,8 @@ func register_building(building: RTSBuilding) -> void:
 	if not building.tree_exiting.is_connected(exiting):
 		building.tree_exiting.connect(exiting)
 		building.tree_entered.connect(register_building.bind(building))
+	if power_enabled and power_grid != null:
+		power_grid.refresh.call_deferred()
 
 
 func registered_buildings() -> Array[RTSBuilding]:
@@ -140,6 +166,8 @@ func _building_exiting(id: int) -> void:
 	# tree_exiting also occurs during reparent. Decide after that operation finishes;
 	# the field retains only weak node refs and the small refund-capable queue.
 	_reconcile_departure.call_deferred(id)
+	if power_enabled and power_grid != null:
+		power_grid.refresh.call_deferred()
 
 
 func _reconcile_departure(id: int) -> void:
@@ -151,6 +179,8 @@ func _reconcile_departure(id: int) -> void:
 	_buildings.erase(id)
 	var producer := _producers.get(id) as UnitProduction
 	_producers.erase(id)
+	if power_enabled and power_grid != null:
+		power_grid.refresh.call_deferred()
 	if producer != null:
 		producer.close(true)
 	if is_instance_valid(self) and is_instance_valid(selection):
@@ -162,6 +192,8 @@ func _retire_building(identity: int) -> UnitProduction:
 	_buildings.erase(identity)
 	var producer := _producers.get(identity) as UnitProduction
 	_producers.erase(identity)
+	if power_enabled and power_grid != null:
+		power_grid.refresh.call_deferred()
 	return producer
 
 
@@ -272,6 +304,8 @@ func order_deployed_unit(unit: RTSUnit, destination: Vector3) -> bool:
 
 func _exit_tree() -> void:
 	_closing = true
+	if power_grid != null:
+		power_grid.close()
 	if credits != null:
 		credits.active = false
 	for producer in _producers.values():

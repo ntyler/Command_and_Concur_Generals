@@ -2,9 +2,13 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT }
-@export var owner_id: int = 1
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT }
+@export var owner_id: int = 1:
+	set(value):
+		owner_id = value
+		_schedule_power_refresh()
 @export var kind: Kind = Kind.BARRACKS
+@export var definition: ConstructionDefinition
 @export var footprint: Vector2 = Vector2(6, 5)
 @export var building_height: float = 2.6
 @export var recipe: ProductionDefinition
@@ -27,6 +31,7 @@ var operational: bool = true:
 		if is_instance_valid(health):
 			health.damage_enabled = value and not destroyed and is_instance_valid(gameplay_field) and gameplay_field.gameplay_enabled
 			_refresh_health()
+		_schedule_power_refresh()
 var selection_indicator: MeshInstance3D
 var rally_indicator: MeshInstance3D
 
@@ -36,6 +41,8 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.POWER_PLANT:
+		return "Power Plant"
 	if kind == Kind.SUPPLY_DEPOT:
 		return "Supply Depot"
 	if kind == Kind.VEHICLE_FACTORY:
@@ -94,10 +101,18 @@ func _ready() -> void:
 		for x in [-1.7, 0.0, 1.7]:
 			_mesh(Vector3(1.2, 0.6, 1.5), Vector3(x, building_height + 0.4, 0), Color("dfbc70"))
 		_mesh(Vector3(footprint.x - 0.8, 0.22, 0.04), Vector3(0, 1.0, -footprint.y / 2.0 + 0.02), Color("86ffcb"))
+	elif kind == Kind.POWER_PLANT:
+		# Original twin transformer stacks and a transverse gold bus, within the
+		# authoritative footprint. The ordinary solid governs movement and fire.
+		for x in [-1.4, 1.4]:
+			_mesh(Vector3(1.15, 0.45, 2.6), Vector3(x, building_height + 0.28, 0), Color("edc45f"))
+			for z in [-0.85, 0.0, 0.85]:
+				_mesh(Vector3(1.5, 0.12, 0.22), Vector3(x, building_height + 0.56, z), Color("fff0b0"))
+		_mesh(Vector3(4.5, 0.25, 0.3), Vector3(0, building_height + 0.78, 0), Color("edc45f"))
 	var label := Label3D.new()
 	_identity_label = label
 	label.text = "%s · %d" % [display_name(), owner_id]
-	label.position.y = building_height + 0.6
+	label.position.y = building_height + (1.25 if kind == Kind.POWER_PLANT else 0.6)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 32
 	label.pixel_size = 0.025
@@ -122,6 +137,13 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if production != null:
 		production.advance(delta)
+
+
+func _schedule_power_refresh() -> void:
+	# These setters occur inside construction/death commits. Publish only after
+	# those commits; an immediate consumer snapshot still rechecks eligibility.
+	if is_instance_valid(gameplay_field) and gameplay_field.power_enabled and gameplay_field.power_grid != null:
+		gameplay_field.power_grid.refresh.call_deferred()
 
 
 func set_selected(selected: bool) -> void:
@@ -150,10 +172,10 @@ func enable_damage(maximum: float) -> void:
 	health.died.connect(_on_died)
 	health_bar = WorldHealthBar.new()
 	health_bar.bar_width = minf(3.8, footprint.x - 0.4)
-	health_bar.position.y = building_height + 1.2
+	health_bar.position.y = building_height + (1.85 if kind == Kind.POWER_PLANT else 1.2)
 	add_child(health_bar)
 	health_label = Label3D.new()
-	health_label.position.y = building_height + 1.85
+	health_label.position.y = building_height + (2.5 if kind == Kind.POWER_PLANT else 1.85)
 	health_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	health_label.font_size = 26
 	health_label.pixel_size = 0.022

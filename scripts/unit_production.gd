@@ -139,7 +139,15 @@ func advance(delta: float) -> void:
 func _advance_head(delta: float) -> void:
 	var job := _jobs[0]
 	if job.elapsed < job.duration:
-		job.elapsed = minf(job.duration, job.elapsed + delta)
+		# Read immediately before this producer's physics progress increment. Earlier
+		# completion/death in this tick applies now; later events apply next advance.
+		var owner := _field_ref.get_ref() as ProductionField
+		var rate_owner := building().owner_id
+		var rate := owner.production_multiplier(building())
+		# A grid listener may cancel the job, destroy this producer or end the match.
+		if not _still_head(job) or building().owner_id != rate_owner:
+			return
+		job.elapsed = minf(job.duration, job.elapsed + delta * rate)
 		if job.elapsed < job.duration:
 			return
 		# A 100% notification is still BEFORE deployment: cancellation may win here.

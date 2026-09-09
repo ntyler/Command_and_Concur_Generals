@@ -4,6 +4,7 @@ extends ProductionPanel
 var build_button: Button
 var factory_button: Button
 var depot_button: Button
+var power_plant_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -28,6 +29,11 @@ func _ready() -> void:
 	depot_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(depot_button)
 	depot_button.pressed.connect(_begin_depot)
+	power_plant_button = Button.new()
+	power_plant_button.focus_mode = Control.FOCUS_NONE
+	power_plant_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(power_plant_button)
+	power_plant_button.pressed.connect(_begin_power_plant)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -48,6 +54,8 @@ func _refresh() -> void:
 	if not _context_active():
 		return
 	super._refresh()
+	if not _context_active():
+		return
 	refresh_construction()
 
 
@@ -57,6 +65,8 @@ func refresh_construction() -> void:
 	var world := field as ConstructionField
 	var building := field.selection.selected_building()
 	var builder := field.selection.selected_builder() if world.builder_construction_enabled else null
+	if not _context_active():
+		return
 	var source: Node3D = builder if world.builder_construction_enabled else building
 	build_button.visible = builder != null if world.builder_construction_enabled else building != null and building.kind == RTSBuilding.Kind.HEADQUARTERS
 	build_button.text = "Build Barracks · %d cr · %s s" % [world.construction_definition.credit_cost, str(world.construction_definition.duration)]
@@ -70,13 +80,20 @@ func refresh_construction() -> void:
 	if depot != null:
 		depot_button.text = "Build Supply Depot · %d cr · %s s" % [depot.credit_cost, str(depot.duration)]
 		depot_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, depot).is_empty()
+	var plant := world.power_plant_definition
+	power_plant_button.visible = world.power_enabled and world.builder_construction_enabled and build_button.visible and plant != null
+	if plant != null:
+		power_plant_button.text = "Build Power Plant · %d cr · %s s" % [plant.credit_cost, str(plant.duration)]
+		power_plant_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, plant).is_empty()
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled)
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled)
 		var hint := "Choose a building, then place it." if any_available else reason
 		if builder != null:
 			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
+			if world.power_enabled:
+				feedback.text = "Right-click ground · Move    X · Stop\nRight-click owned unfinished site · Resume" if any_available else reason
 		else:
 			feedback.text = hint
 	elif world.builder_construction_enabled and field.selection.has_selected_builder():
@@ -90,7 +107,7 @@ func refresh_construction() -> void:
 		selection_details.text = _health_text(builder.combat.health)
 	_displayed_site = site
 	var unfinished := site != null and site.state != ConstructionSite.State.OPERATIONAL
-	site_status.visible = unfinished or builder != null
+	site_status.visible = unfinished or (builder != null and not world.power_enabled)
 	site_progress.visible = unfinished
 	# Cancelling the selected site refunds it. Builder X Stop instead pauses it;
 	# keeping that distinction in the contextual UI avoids accidental refunds.
@@ -144,6 +161,14 @@ func _begin_depot() -> void:
 	var world := field as ConstructionField
 	if world.supply_depot_definition != null and is_instance_valid(world.placement):
 		world.placement.begin(_placement_source(), world.supply_depot_definition)
+
+
+func _begin_power_plant() -> void:
+	if not _context_active() or not field.gameplay_enabled:
+		return
+	var world := field as ConstructionField
+	if world.power_enabled and world.builder_construction_enabled and world.power_plant_definition != null and is_instance_valid(world.placement):
+		world.placement.begin(_placement_source(), world.power_plant_definition)
 
 
 func _placement_source() -> Node3D:

@@ -9,3 +9,4 @@ credit_cost = 600
 duration = 15.0
 footprint = Vector2(6, 5)
 height = 2.8
+power_required = 4

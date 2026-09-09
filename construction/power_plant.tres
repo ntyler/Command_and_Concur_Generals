@@ -4,8 +4,9 @@
 
 [resource]
 script = ExtResource("1")
-credit_cost = 400
+kind = 4
+credit_cost = 500
 duration = 10.0
 footprint = Vector2(6, 5)
-height = 2.6
-power_required = 2
+height = 3.6
+power_generated = 10

@@ -238,9 +238,12 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 	body.operational = false
 	body.owner_id = requester
 	body.kind = definition.kind
+	body.definition = definition
 	body.recipe = load("res://production/rocket_vehicle.tres") if body.kind == RTSBuilding.Kind.VEHICLE_FACTORY else load("res://production/rifle.tres")
 	if body.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
 		body.recipe = load("res://production/collector_truck.tres")
+	elif body.kind == RTSBuilding.Kind.POWER_PLANT:
+		body.recipe = null
 	body.footprint = definition.footprint
 	body.building_height = definition.height
 	body.name = "Built%s%d" % [definition.display_name().replace(" ", ""), site.site_id]
@@ -349,14 +352,17 @@ func advance(delta: float) -> void:
 	# Subsequent cancellation is rejected; no geometry update occurs here.
 	site.state = ConstructionSite.State.OPERATIONAL
 	site.reason = "Complete" if site.builder_required else "Operational"
-	body.operational = true
 	unfinished_id = 0
+	body.operational = true
 	var rally := body.exit_position() + Vector3.RIGHT * 3.0
-	if field().valid_rally(body.exit_position(), rally):
+	if body.production != null and field().valid_rally(body.exit_position(), rally):
 		body.production.has_rally = true
 		body.production.rally_point = rally
 	(body as ConstructionBuilding).refresh_construction()
 	_detach(site, true)
+	# Complete the site and builder transition before power listeners can react.
+	if field() != null:
+		field().refresh_power()
 	if field() != null:
 		changed.emit(site.site_id)
 
