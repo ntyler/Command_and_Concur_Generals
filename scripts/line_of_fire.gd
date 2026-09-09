@@ -55,7 +55,9 @@ static func target_exclusions(target: Node3D) -> Array[RID]:
 	return exclusions
 
 
-static func muzzle(unit: RTSUnit) -> Vector3:
+static func muzzle(unit: Node3D) -> Vector3:
+	if unit is GroundDefenseBattery:
+		return unit.weapon_origin()
 	return unit.global_position + Vector3.UP * MUZZLE_HEIGHT
 
 
@@ -63,7 +65,7 @@ static func aim(unit: Node3D) -> Vector3:
 	return unit.global_position + Vector3.UP * AIM_HEIGHT
 
 
-func weapon_clearance(source: RTSUnit, target: Node3D, definition: WeaponDefinition) -> Trace:
+func weapon_clearance(source: Node3D, target: Node3D, definition: WeaponDefinition) -> Trace:
 	var line := firing_line(source, target)
 	if not line.is_clear() or definition.mode != WeaponDefinition.Mode.GUIDED_PROJECTILE:
 		return line
@@ -73,15 +75,23 @@ func weapon_clearance(source: RTSUnit, target: Node3D, definition: WeaponDefinit
 	return line if launch.is_clear() else launch
 
 
-func firing_line(source: RTSUnit, target: Node3D) -> Trace:
+func firing_line(source: Node3D, target: Node3D) -> Trace:
 	clearance_queries += 1
 	var world := source.get_world_3d()
 	# The centerline muzzle stays within the body footprint. Also validate the
 	# short vertical attachment so geometry between body and muzzle cannot bypass.
-	var attachment := segment(world, source.global_position + Vector3.UP * BODY_HEIGHT, muzzle(source))
+	var exclusions: Array[RID] = []
+	var attachment_start := source.global_position + Vector3.UP * BODY_HEIGHT
+	if source is GroundDefenseBattery:
+		# The committed stationary footprint is still a blocker to every other
+		# weapon. Only its own attachment/shot excludes its own collision RID.
+		exclusions.append(source.get_rid())
+		attachment_start = source.weapon_attachment()
+	var attachment := segment(world, attachment_start, muzzle(source), exclusions)
 	if not attachment.is_clear():
 		return attachment
-	return segment(world, muzzle(source), aim(target), target_exclusions(target))
+	exclusions.append_array(target_exclusions(target))
+	return segment(world, muzzle(source), aim(target), exclusions)
 
 
 func segment(world: World3D, from: Vector3, to: Vector3, exclusions: Array[RID] = []) -> Trace:
@@ -90,7 +100,7 @@ func segment(world: World3D, from: Vector3, to: Vector3, exclusions: Array[RID] 
 	result.to_position = to
 	result.position = to
 	# Commands/input may run outside physics. Unavailable is never clear.
-	if not Engine.is_in_physics_frame() or world == null:
+	if not Engine.is_in_physics_frame() or world == null or not from.is_finite() or not to.is_finite():
 		return result
 	_ray.exclude = exclusions
 	_point.exclude = exclusions

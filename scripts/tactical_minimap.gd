@@ -146,7 +146,7 @@ func refresh_markers() -> void:
 		for building in (field as ProductionField).registered_buildings():
 			var rectangle := Rect2(Vector2(building.global_position.x, building.global_position.z) - building.footprint / 2.0, building.footprint)
 			terrain.erase(rectangle)
-			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant"][building.kind]
+			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant", "ground_defense_battery"][building.kind]
 			if building is ConstructionBuilding and not building.operational:
 				kind = "site"
 			markers.append({"identity": building.get_instance_id(), "kind": kind, "position": building.global_position, "owner": building.owner_id, "selected": false, "depleted": false, "rectangle": rectangle})
@@ -230,7 +230,9 @@ func _draw() -> void:
 			var rectangle := mapping.world_rectangle(marker.rectangle)
 			draw_rect(rectangle, Color(color, 0.35))
 			draw_rect(rectangle, color, false, 1.2)
-			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "site": "+"}[marker.kind]
+			if marker.kind == "ground_defense_battery":
+				draw_arc(point, 6.0, 0, TAU, 16, color, 1.2, true)
+			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "ground_defense_battery": "G", "site": "+"}[marker.kind]
 			draw_string(font, point + Vector2(-4, 4), glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
 	if footprint.size() >= 3:
 		var outline := footprint.duplicate()

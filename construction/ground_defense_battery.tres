@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ConstructionDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/construction_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://weapons/ground_defense.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+kind = 5
+credit_cost = 700
+duration = 12.0
+footprint = Vector2(6, 5)
+height = 1.4
+power_generated = 0
+power_required = 3
+maximum_health = 600.0
+weapon_data = ExtResource("2")
+acquisition_interval = 0.25
+turret_turn_speed = 3.0

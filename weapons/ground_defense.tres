@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WeaponDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Ground Defense Battery"
+mode = 0
+damage = 18.0
+attack_range = 12.0
+cooldown = 0.75
+facing_tolerance_degrees = 8.0

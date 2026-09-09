@@ -5,6 +5,7 @@ extends Node
 var field: ConstructionField
 var active: bool = false
 var preview: MeshInstance3D
+var range_indicator: MeshInstance3D
 var status: Label
 var reason: String = ""
 var point := Vector3.ZERO
@@ -35,6 +36,12 @@ func _ready() -> void:
 	preview.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	field.add_child(preview)
 	preview.hide()
+	range_indicator = MeshInstance3D.new()
+	range_indicator.name = "DefensePlacementRange"
+	range_indicator.material_override = _material
+	range_indicator.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	field.add_child(range_indicator)
+	range_indicator.hide()
 	status = Label.new()
 	status.position = Vector2(430, 20)
 	status.size = Vector2(460, 70)
@@ -52,6 +59,14 @@ func begin(source: Variant, choice: ConstructionDefinition = null) -> bool:
 		return false
 	definition = requested
 	(preview.mesh as BoxMesh).size = Vector3(definition.footprint.x, definition.height, definition.footprint.y)
+	range_indicator.hide()
+	if definition.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY and definition.weapon_data != null:
+		var ring := TorusMesh.new()
+		ring.inner_radius = maxf(0.0, definition.weapon_data.attack_range - 0.06)
+		ring.outer_radius = definition.weapon_data.attack_range + 0.06
+		ring.rings = 64
+		ring.ring_segments = 6
+		range_indicator.mesh = ring
 	_generation += 1
 	_owner = owner
 	# A preview has no gameplay side effects. The manager replaces the source's
@@ -79,6 +94,8 @@ func cancel() -> void:
 		field.update_placement_guides_visibility()
 	if is_instance_valid(preview):
 		preview.hide()
+	if is_instance_valid(range_indicator):
+		range_indicator.hide()
 	if is_instance_valid(status):
 		status.hide()
 
@@ -140,12 +157,15 @@ func _physics_process(delta: float) -> void:
 	# Interactive HUD motion must not relocate the free preview behind the panel.
 	if field.camera_rig.pointer_over_interface():
 		preview.hide()
+		range_indicator.hide()
 		return
 	var hit := _ground(_pointer)
 	preview.visible = not hit.is_empty() and not field.camera_rig.pointer_over_interface()
+	range_indicator.visible = preview.visible and definition.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY
 	if not hit.is_empty():
 		point = hit["position"]
 		preview.position = point + Vector3.UP * definition.height / 2.0
+		range_indicator.position = point + Vector3.UP * 0.08
 	if _cooldown <= 0.0:
 		_cooldown = 0.1
 		reason = field.construction.validate(_owner, source, definition, point) if not hit.is_empty() else "Point at flat ground inside the green boundary"
@@ -165,5 +185,7 @@ func _exit_tree() -> void:
 	cancel()
 	if is_instance_valid(preview) and not preview.is_queued_for_deletion():
 		preview.queue_free()
+	if is_instance_valid(range_indicator) and not range_indicator.is_queued_for_deletion():
+		range_indicator.queue_free()
 	if is_instance_valid(status) and not status.is_queued_for_deletion():
 		status.queue_free()

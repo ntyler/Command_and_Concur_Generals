@@ -82,6 +82,10 @@ func _physics_process(delta: float) -> void:
 
 
 func show_tracer(muzzle: Vector3, aim: Vector3) -> void:
+	world_tracer(unit.gameplay_field, muzzle, aim)
+
+
+static func world_tracer(field: TestField, muzzle: Vector3, aim: Vector3) -> void:
 	var trace := MeshInstance3D.new()
 	trace.add_to_group("combat_tracers")
 	var mesh := BoxMesh.new()
@@ -91,7 +95,7 @@ func show_tracer(muzzle: Vector3, aim: Vector3) -> void:
 	material.albedo_color = Color("fff0a0")
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	trace.material_override = material
-	unit.gameplay_field.add_child(trace)
+	field.add_child(trace)
 	trace.global_position = (muzzle + aim) * 0.5
 	if not muzzle.is_equal_approx(aim):
 		trace.look_at(aim)

@@ -39,6 +39,8 @@ func _ready() -> void:
 	var scenario := "FIELDWORK / BULLDOZER ASSAULT" if field.builder_construction_enabled else ("FIELDWORK / SUPPLY DEPOT ASSAULT" if field.supply_depot_definition != null else "FIELDWORK / COMBINED ARMS")
 	if field.power_enabled:
 		scenario = "FIELDWORK / POWER ASSAULT"
+	if field.defense_definition != null:
+		scenario = "FIELDWORK / DEFENSE ASSAULT"
 	_label(help_content, scenario, Color("a7ecdf"))
 	_label(help_content, "WASD / arrows / edges · Pan    Wheel · Zoom\nClick / drag · Select units    Shift · Toggle / add\nClick owned building · Select building\nRight-click ground · Move    X · Stop\nRight-click hostile · Attack with combat units")
 	if field.attack_move_enabled:
@@ -51,6 +53,8 @@ func _ready() -> void:
 		build_hint = "HQ · Train Bulldozers    Depot · Train Collectors\nOne owned Bulldozer · Build Depot / Barracks / Factory\nRight-click unfinished site · Resume    X / Move · Pause"
 		if field.power_enabled:
 			build_hint = "HQ · Train Bulldozers    Depot · Train Collectors\nBulldozer · Build Depot / Barracks / Factory / Power Plant\nRight-click unfinished site · Resume    X / Move · Pause"
+		if field.defense_definition != null:
+			build_hint = "HQ · Train Bulldozers    Depot · Train Collectors\nBulldozer · Build economy / production / power / ground defense\nRight-click unfinished site · Resume    X / Move · Pause"
 	_label(help_content, "%s\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access" % [harvest_hint, build_hint])
 	_label(help_content, "Minimap · Left-click to center; right-click to Move\nCtrl + 1–9 · Assign group    1–9 · Recall\nDouble-tap same number · Recall and center\nEsc · Close Help / cancel drag    F3 · Diagnostics")
 	# The builder variant keeps the same 22-line total as the validated 720p Help.
@@ -63,6 +67,8 @@ func _ready() -> void:
 		var barracks_required := field.construction_definition.power_required
 		var factory_required := field.vehicle_factory_definition.power_required if field.vehicle_factory_definition != null else 0
 		objective_hint = "Power Plant +%d · Barracks need %d · Factory needs %d\nLow power: Barracks/Factory %d%% · Destroy enemy HQ / protect yours" % [generated, barracks_required, factory_required, roundi(PowerGrid.LOW_POWER_RATE * 100.0)]
+		if field.defense_definition != null:
+			objective_hint = "Plant +%d · Barracks %d / Factory %d / Defense %d demand\nLow power: Barracks/Factory %d%% · Ground defenses cannot fire" % [generated, barracks_required, factory_required, field.defense_definition.power_required, roundi(PowerGrid.LOW_POWER_RATE * 100.0)]
 	_label(help_content, objective_hint, Color("ffce78"))
 	set_open(false)
 

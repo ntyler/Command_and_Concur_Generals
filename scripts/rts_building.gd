@@ -2,11 +2,14 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT }
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT, POWER_PLANT, GROUND_DEFENSE_BATTERY }
 @export var owner_id: int = 1:
 	set(value):
+		if owner_id == value:
+			return
 		owner_id = value
 		_schedule_power_refresh()
+		availability_changed.emit() # Final: a listener may immediately remove this body.
 @export var kind: Kind = Kind.BARRACKS
 @export var definition: ConstructionDefinition
 @export var footprint: Vector2 = Vector2(6, 5)
@@ -41,6 +44,8 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.GROUND_DEFENSE_BATTERY:
+		return "Ground Defense Battery"
 	if kind == Kind.POWER_PLANT:
 		return "Power Plant"
 	if kind == Kind.SUPPLY_DEPOT:

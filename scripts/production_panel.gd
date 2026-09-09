@@ -43,6 +43,8 @@ func _ready() -> void:
 	power_label = _label(column, "")
 	power_label.add_theme_font_size_override("font_size", 14)
 	power_warning = _label(column, "LOW POWER · Barracks/Factory production %d%%" % roundi(PowerGrid.LOW_POWER_RATE * 100.0))
+	if field is ConstructionField and (field as ConstructionField).defense_definition != null:
+		power_warning.text = "LOW POWER · Barracks/Factory production %d%%\nGround defenses cannot fire" % roundi(PowerGrid.LOW_POWER_RATE * 100.0)
 	power_warning.add_theme_font_size_override("font_size", 14)
 	power_warning.add_theme_color_override("font_color", Color("ffce78"))
 	power_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -150,6 +152,8 @@ func _refresh() -> void:
 		if building.kind == RTSBuilding.Kind.POWER_PLANT:
 			var contribution := field.power_grid.contribution(building)
 			selection_details.text += ("" if selection_details.text.is_empty() else "\n") + "Generation: %d power" % contribution.generated
+		elif building is GroundDefenseBattery:
+			selection_details.text += "\nPower required: %d · %s" % [building.definition.power_required, (building as GroundDefenseBattery).status_text()]
 		elif building.definition.power_required > 0:
 			selection_details.text += "\nPower required: %d · Production rate: %d%%" % [building.definition.power_required, roundi(float(snapshot.multiplier) * 100.0)]
 		selection_details.visible = not selection_details.text.is_empty()
@@ -301,8 +305,11 @@ func _observe_context(actor: Node) -> void:
 		if is_instance_valid(unit.combat):
 			_watch(unit.combat, &"state_changed", 1)
 			_watch(unit.combat.health, &"damaged", 2)
-	elif actor is RTSBuilding and is_instance_valid((actor as RTSBuilding).health):
-		_watch((actor as RTSBuilding).health, &"damaged", 2)
+	elif actor is RTSBuilding:
+		if is_instance_valid((actor as RTSBuilding).health):
+			_watch((actor as RTSBuilding).health, &"damaged", 2)
+		if actor is GroundDefenseBattery:
+			_watch(actor, &"status_changed")
 
 
 func _watch(emitter: Object, event: StringName, arguments: int = 0) -> void:

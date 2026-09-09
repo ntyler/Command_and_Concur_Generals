@@ -276,8 +276,8 @@ func _on_damaged(_amount: float, source: Node) -> void:
 	# An active parent order owns acquisition; existing idle retaliation is unchanged.
 	if is_instance_valid(unit.attack_move) and unit.attack_move.active:
 		return
-	if retaliation_enabled and player_command == PlayerCommand.NONE and target_actor() == null and TeamRules.can_attack(unit.gameplay_field, unit, source as RTSUnit):
-		issue_attack(source as RTSUnit, false)
+	if retaliation_enabled and player_command == PlayerCommand.NONE and target_actor() == null and TeamRules.can_attack(unit.gameplay_field, unit, source as Node3D):
+		issue_attack(source as Node3D, false)
 
 
 func _on_died(_source: Node) -> void:

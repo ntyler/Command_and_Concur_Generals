@@ -5,6 +5,7 @@ var build_button: Button
 var factory_button: Button
 var depot_button: Button
 var power_plant_button: Button
+var defense_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -34,6 +35,11 @@ func _ready() -> void:
 	power_plant_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(power_plant_button)
 	power_plant_button.pressed.connect(_begin_power_plant)
+	defense_button = Button.new()
+	defense_button.focus_mode = Control.FOCUS_NONE
+	defense_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(defense_button)
+	defense_button.pressed.connect(_begin_defense)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -85,10 +91,16 @@ func refresh_construction() -> void:
 	if plant != null:
 		power_plant_button.text = "Build Power Plant · %d cr · %s s" % [plant.credit_cost, str(plant.duration)]
 		power_plant_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, plant).is_empty()
+	var defense := world.defense_definition
+	defense_button.visible = world.power_enabled and world.builder_construction_enabled and build_button.visible and defense != null
+	if defense != null:
+		defense_button.text = "Build Ground Defense · %d cr · %s s" % [defense.credit_cost, str(defense.duration)]
+		defense_button.tooltip_text = "Ground Defense Battery · %d power · attacks hostile ground units" % defense.power_required
+		defense_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, defense).is_empty()
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled)
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled)
 		var hint := "Choose a building, then place it." if any_available else reason
 		if builder != null:
 			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
@@ -175,11 +187,19 @@ func _placement_source() -> Node3D:
 	return field.selection.selected_builder() if (field as ConstructionField).builder_construction_enabled else field.selection.selected_building()
 
 
+func _begin_defense() -> void:
+	if not _context_active() or not field.gameplay_enabled:
+		return
+	var world := field as ConstructionField
+	if world.power_enabled and world.builder_construction_enabled and world.defense_definition != null and is_instance_valid(world.placement):
+		world.placement.begin(_placement_source(), world.defense_definition)
+
+
 func _cancel_site() -> void:
 	if not _context_active() or not field.gameplay_enabled:
 		return
 	var building := field.selection.selected_building() as ConstructionBuilding
-	if building != null:
+	if building != null and building.site != null:
 		(field as ConstructionField).construction.cancel(field.selection.friendly_owner_id, building.site.site_id)
 
 

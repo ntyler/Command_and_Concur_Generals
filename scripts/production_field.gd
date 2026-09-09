@@ -79,6 +79,17 @@ func production_multiplier(building: RTSBuilding) -> float:
 	return power_snapshot(building.owner_id).multiplier
 
 
+func defense_firing_allowed(building: RTSBuilding, notify: bool = true) -> bool:
+	# Power publication can synchronously destroy/reparent actors or Restart.
+	# A firing decision belongs to this exact live field, owner and grid.
+	if not gameplay_enabled or not power_enabled or power_grid == null or not is_instance_valid(building) or building.kind != RTSBuilding.Kind.GROUND_DEFENSE_BATTERY or building.gameplay_field != self or not building.operational or not contains_building(building):
+		return false
+	var owner := building.owner_id
+	var grid := power_grid
+	var allowed := grid.firing_eligible(owner, notify)
+	return allowed and is_instance_valid(self) and gameplay_enabled and power_enabled and power_grid == grid and grid.active and is_instance_valid(building) and building.owner_id == owner and building.gameplay_field == self and building.operational and contains_building(building)
+
+
 func set_movement_debug(enabled: bool) -> void:
 	super.set_movement_debug(enabled)
 	for building in registered_buildings():
@@ -138,6 +149,10 @@ func register_building(building: RTSBuilding) -> void:
 			RTSBuilding.Kind.VEHICLE_FACTORY: building.definition = load("res://construction/vehicle_factory.tres")
 			RTSBuilding.Kind.SUPPLY_DEPOT: building.definition = load("res://construction/supply_depot.tres")
 			RTSBuilding.Kind.POWER_PLANT: building.definition = load("res://construction/power_plant.tres")
+			RTSBuilding.Kind.GROUND_DEFENSE_BATTERY: building.definition = load("res://construction/ground_defense_battery.tres")
+	if building.kind == RTSBuilding.Kind.GROUND_DEFENSE_BATTERY:
+		building.recipe = null
+		building.enable_damage(building.definition.maximum_health)
 	building.set_movement_debug(movement_debug)
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
@@ -149,6 +164,8 @@ func register_building(building: RTSBuilding) -> void:
 	if not building.tree_exiting.is_connected(exiting):
 		building.tree_exiting.connect(exiting)
 		building.tree_entered.connect(register_building.bind(building))
+	if building is GroundDefenseBattery:
+		(building as GroundDefenseBattery).activate_defense()
 	if power_enabled and power_grid != null:
 		power_grid.refresh.call_deferred()
 

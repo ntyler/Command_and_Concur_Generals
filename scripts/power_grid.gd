@@ -74,6 +74,18 @@ func snapshot(owner_id: int) -> Dictionary:
 	return {"generated": value.generated, "required": value.required, "low_power": low, "multiplier": LOW_POWER_RATE if low else 1.0}
 
 
+func firing_eligible(owner_id: int, notify: bool = true) -> bool:
+	# Defense is binary. The established producer slowdown never authorizes a shot.
+	# The last shot boundary reconciles silently so no listener can invalidate
+	# the muzzle geometry after its final clear-space query.
+	if notify:
+		refresh()
+	else:
+		_reconcile()
+	var value: Dictionary = _totals.get(owner_id, {"generated": 0, "required": 0})
+	return active and field() != null and value.generated >= value.required
+
+
 func close() -> void:
 	active = false
 	_totals.clear()
