@@ -85,17 +85,40 @@ func _gui_input(event: InputEvent) -> void:
 	accept_event()
 	if not event is InputEventMouseButton or not event.pressed or not _interactive():
 		return
+	if field.selection.attack_move_targeting and event.button_index == MOUSE_BUTTON_RIGHT:
+		field.selection.cancel_attack_move_targeting()
+		return
 	var point: Variant = mapping.content_to_world(event.position)
 	if point == null:
+		if field.selection.attack_move_targeting and event.button_index == MOUSE_BUTTON_LEFT:
+			field.selection._reject_attack_move_destination()
 		return
 	if event.button_index == MOUSE_BUTTON_LEFT:
 		field.selection.cancel_gesture()
-		field.camera_rig.center_on_ground(point)
+		if field.selection.attack_move_targeting:
+			field.selection.queue_attack_move_destination(point)
+		else:
+			field.camera_rig.center_on_ground(point)
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		field.selection.cancel_gesture()
 		var selected := field.selection.selected_units()
 		if is_instance_valid(self) and not selected.is_empty() and _interactive():
 			_pending_moves.append(point)
+
+
+func _exit_tree() -> void:
+	_pending_moves.clear()
+	if get_viewport().size_changed.is_connected(_layout):
+		get_viewport().size_changed.disconnect(_layout)
+	if is_instance_valid(field):
+		if is_instance_valid(field.selection) and field.selection.selection_changed.is_connected(_selection_changed):
+			field.selection.selection_changed.disconnect(_selection_changed)
+		if field is ConstructionField and (field as ConstructionField).construction.changed.is_connected(_construction_changed):
+			(field as ConstructionField).construction.changed.disconnect(_construction_changed)
+	if is_instance_valid(groups) and groups.changed.is_connected(_groups_changed):
+		groups.changed.disconnect(_groups_changed)
+	field = null
+	groups = null
 
 
 func refresh_markers() -> void:

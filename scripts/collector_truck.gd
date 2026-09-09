@@ -34,12 +34,12 @@ func _build_visual() -> void:
 			_add_box(Vector3(0.22, 0.32, 0.32), Vector3(x, 0.24, z), Color("263c49"))
 
 
-func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
+func move_to(destination: Vector3, combat_pursuit: bool = false, preserve_attack_move: bool = false) -> bool:
 	if not TeamRules.is_combat_member(gameplay_field, self):
 		return false
 	var work := harvesting
 	var version := work.interrupt()
-	var accepted := super.move_to(destination, combat_pursuit)
+	var accepted := super.move_to(destination, combat_pursuit, preserve_attack_move)
 	work.publish(version)
 	return accepted
 

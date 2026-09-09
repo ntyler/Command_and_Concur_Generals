@@ -7,9 +7,11 @@ signal attack_requested(target: Node3D)
 signal stop_requested
 signal harvest_requested(cache: SupplyCache)
 signal deposit_requested(headquarters: RTSBuilding)
+signal attack_move_targeting_changed
 
 @export var friendly_owner_id: int = 1
 @export var drag_threshold: float = 6.0
+@export var attack_move_enabled: bool = false
 
 var camera_rig: RTSCamera
 var gameplay_field: TestField
@@ -22,11 +24,104 @@ var _pressed: bool = false
 var _dragging: bool = false
 var _additive: bool = false
 var _pending_picks: Array[Dictionary] = []
-var placement_active: bool = false
+var placement_active: bool = false:
+	set(value):
+		placement_active = value
+		if value and attack_move_targeting:
+			cancel_attack_move_targeting()
+var attack_move_targeting: bool = false
+var attack_move_feedback: String = ""
+var _targeting_revision: int = 0
+var _focused: bool = true
 
 
 func _ready() -> void:
 	get_window().mouse_exited.connect(cancel_gesture)
+	get_window().focus_exited.connect(cancel_attack_move_targeting)
+	selection_changed.connect(_attack_move_selection_changed)
+
+
+func _attack_move_available() -> bool:
+	return attack_move_enabled and _focused and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(gameplay_field) and gameplay_field.is_inside_tree() and not gameplay_field.is_queued_for_deletion() and gameplay_field.gameplay_enabled and not placement_active
+
+
+func has_attack_move_selection() -> bool:
+	if not _attack_move_available():
+		return false
+	for unit in _selected:
+		if gameplay_field.can_attack_move(unit):
+			return true
+	return false
+
+
+func begin_attack_move() -> bool:
+	if not _attack_move_available():
+		return false
+	var revision := _targeting_revision
+	_prune_selection()
+	if not is_instance_valid(self) or revision != _targeting_revision or not has_attack_move_selection():
+		return false
+	_targeting_revision += 1
+	attack_move_targeting = true
+	attack_move_feedback = "Choose ground or minimap destination."
+	cancel_gesture()
+	_pending_picks.clear()
+	attack_move_targeting_changed.emit() # Commit before synchronous listeners.
+	return true
+
+
+func cancel_attack_move_targeting() -> void:
+	_targeting_revision += 1
+	var changed := attack_move_targeting or not attack_move_feedback.is_empty()
+	attack_move_targeting = false
+	attack_move_feedback = ""
+	for index in range(_pending_picks.size() - 1, -1, -1):
+		if str(_pending_picks[index].get("kind", "")).begins_with("attack_move_"):
+			_pending_picks.remove_at(index)
+	if changed:
+		attack_move_targeting_changed.emit()
+
+
+func queue_attack_move_destination(destination: Vector3) -> bool:
+	if not attack_move_targeting or not _attack_move_available():
+		return false
+	_pending_picks.append({"kind": "attack_move_ground", "destination": destination, "revision": _targeting_revision})
+	return true
+
+
+func _attack_move_selection_changed(_count: int) -> void:
+	if attack_move_targeting and not has_attack_move_selection():
+		cancel_attack_move_targeting()
+
+
+func _reject_attack_move_destination() -> void:
+	attack_move_feedback = "Invalid destination. Choose reachable clear ground."
+	attack_move_targeting_changed.emit()
+
+
+func _dispatch_attack_move(destination: Vector3, revision: int) -> void:
+	if not attack_move_targeting or revision != _targeting_revision or not _attack_move_available():
+		return
+	var result := gameplay_field.issue_attack_move(destination)
+	if not is_instance_valid(self) or revision != _targeting_revision or not _attack_move_available():
+		return
+	if result.has_acceptance():
+		cancel_attack_move_targeting()
+	else:
+		_reject_attack_move_destination()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event.is_echo():
+		return
+	# GUI and Help get first refusal, including focused text controls and Escape.
+	if attack_move_targeting and event.is_action_pressed("cancel_selection"):
+		cancel_attack_move_targeting()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("attack_move"):
+		var key := event as InputEventKey
+		if key != null and not key.ctrl_pressed and not key.alt_pressed and not key.meta_pressed and not key.shift_pressed and begin_attack_move():
+			get_viewport().set_input_as_handled()
 
 
 func selected_units() -> Array[RTSUnit]:
@@ -52,6 +147,12 @@ func replace_units(candidates: Array) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# Cancellation owns right-click even over the minimap or another UI surface.
+	# It cannot fall through to ordinary Move or explicit Attack.
+	if attack_move_targeting and event.is_action_pressed("command_move"):
+		cancel_attack_move_targeting()
+		get_viewport().set_input_as_handled()
+		return
 	# _input observes cancellation even when GUI consumes the eventual release.
 	if event.is_action_pressed("cancel_selection"):
 		cancel_gesture()
@@ -77,6 +178,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if placement_active or camera_rig.pointer_over_interface():
+		return
+	if attack_move_targeting:
+		if event.is_action_pressed("select_units"):
+			cancel_gesture()
+			_pending_picks.append({"kind": "attack_move_screen", "position": (event as InputEventMouseButton).position, "revision": _targeting_revision})
+			get_viewport().set_input_as_handled()
+		elif event.is_action_released("select_units"):
+			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("select_units"):
 		_pressed = true
@@ -104,10 +213,33 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(_delta: float) -> void:
 	_prune_selection()
+	if not is_instance_valid(self):
+		return
+	if attack_move_targeting and not has_attack_move_selection():
+		cancel_attack_move_targeting()
+	if not is_instance_valid(self):
+		return
 	# Ray queries belong to the physics tick; queued input keeps selection/command order.
-	for request in _pending_picks:
+	var pending := _pending_picks.duplicate()
+	_pending_picks.clear()
+	for request in pending:
+		if not is_instance_valid(self) or not is_instance_valid(gameplay_field) or not gameplay_field.gameplay_enabled:
+			return
 		if request["kind"] == "stop":
 			stop_requested.emit()
+			continue
+		if request["kind"] == "attack_move_ground":
+			_dispatch_attack_move(request["destination"], request["revision"])
+			continue
+		if request["kind"] == "attack_move_screen":
+			if not attack_move_targeting or request["revision"] != _targeting_revision or not _attack_move_available():
+				continue
+			var hit := _raycast(request["position"], 1 | 2 | 4)
+			var collider := hit.get("collider") as CollisionObject3D
+			if is_instance_valid(collider) and collider.collision_layer & 1:
+				_dispatch_attack_move(hit["position"], request["revision"])
+			else:
+				_reject_attack_move_destination()
 			continue
 		var point: Vector2 = request["position"]
 		if request["kind"] == "select":
@@ -140,7 +272,6 @@ func _physics_process(_delta: float) -> void:
 						deposit_requested.emit(building)
 				elif (hit["collider"] as CollisionObject3D).collision_layer & 1:
 					move_requested.emit(hit["position"])
-	_pending_picks.clear()
 
 
 func select_clicked(unit: RTSUnit, additive: bool) -> void:
@@ -272,5 +403,20 @@ func _raycast(point: Vector2, mask: int) -> Dictionary:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_focused = false
 		cancel_gesture()
 		_pending_picks.clear()
+		cancel_attack_move_targeting()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_focused = true
+
+
+func _exit_tree() -> void:
+	_pending_picks.clear()
+	cancel_gesture()
+	cancel_attack_move_targeting()
+	if get_window().mouse_exited.is_connected(cancel_gesture):
+		get_window().mouse_exited.disconnect(cancel_gesture)
+	if get_window().focus_exited.is_connected(cancel_attack_move_targeting):
+		get_window().focus_exited.disconnect(cancel_attack_move_targeting)
+	gameplay_field = null

@@ -51,14 +51,14 @@ func _exit_tree() -> void:
 		source.unwatch(self)
 
 
-func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
+func move_to(destination: Vector3, combat_pursuit: bool = false, preserve_attack_move: bool = false) -> bool:
 	var lifetime: WeakRef = weakref(self)
 	var source := recorder
 	var before := _capture(source)
 	var prior_context := _probe_context
 	_probe_context = "move_to"
 	_record(source, "move_command_requested", before, {"destination": _vector(destination), "combat_pursuit": combat_pursuit})
-	var accepted := super.move_to(destination, combat_pursuit)
+	var accepted := super.move_to(destination, combat_pursuit, preserve_attack_move)
 	if lifetime.get_ref() == null:
 		return accepted
 	_record(source, "move_command_result", before, {"accepted": accepted, "requested_destination": _vector(destination)})

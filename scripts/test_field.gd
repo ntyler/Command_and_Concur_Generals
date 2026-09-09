@@ -220,7 +220,7 @@ func issue_move(clicked: Vector3) -> CommandBatchResult:
 	var reserved := PackedVector3Array()
 	for unit in units:
 		if contains_unit(unit) and not selected_ids.has(unit.unit_id):
-			reserved.append(unit.assigned_destination if unit.moving else unit.global_position)
+			reserved.append(_reserved_command_destination(unit))
 	var slots := destinations.generate_slots(map, clicked, selected.size(), reserved)
 	if slots.size() != selected.size():
 		status_label.text = "%02d selected  /  No room for destinations" % selected.size()
@@ -248,6 +248,114 @@ func issue_move(clicked: Vector3) -> CommandBatchResult:
 		for id in result.accepted_ids:
 			last_command_slots.append(result.assignments[id])
 	return _finish_batch(result, "Move order")
+
+
+func _attack_move_context_active() -> bool:
+	if not gameplay_enabled or not is_inside_tree() or not is_instance_valid(selection) or not selection.is_inside_tree():
+		return false
+	var ancestor: Node = self
+	while ancestor != null:
+		if ancestor.is_queued_for_deletion():
+			return false
+		ancestor = ancestor.get_parent()
+	return true
+
+
+func can_attack_move(unit: RTSUnit) -> bool:
+	if not _attack_move_context_active() or not TeamRules.is_controlled(self, unit, selection.friendly_owner_id):
+		return false
+	if not is_instance_valid(unit.combat) or not is_instance_valid(unit.combat.weapon) or not is_instance_valid(unit.attack_move):
+		return false
+	if not unit.combat.weapon.definition.is_valid():
+		return false
+	var ancestor: Node = unit
+	while ancestor != null and ancestor != self:
+		if ancestor.is_queued_for_deletion():
+			return false
+		ancestor = ancestor.get_parent()
+	return ancestor == self
+
+
+func _reserved_command_destination(unit: RTSUnit) -> Vector3:
+	# Temporary pursuit/holding never releases a live parent order's final slot.
+	if is_instance_valid(unit.attack_move) and unit.attack_move.active:
+		return unit.attack_move.final_slot
+	return unit.assigned_destination if unit.moving else unit.global_position
+
+
+func issue_attack_move(clicked: Vector3) -> CommandBatchResult:
+	var result := _new_batch()
+	if not _attack_move_context_active():
+		return result
+	var selected := _batch_selection(result)
+	# Selection pruning is a notification boundary, including field departure.
+	if not is_instance_valid(self):
+		result.superseded = true
+		return result
+	if result.superseded or not _attack_move_context_active() or selected.is_empty():
+		return result
+	var participating: Array[RTSUnit] = []
+	for unit in selected:
+		if is_instance_valid(unit) and can_attack_move(unit):
+			participating.append(unit)
+	if participating.is_empty():
+		status_label.text = "Attack Move rejected · select a Rifle or Rocket Vehicle"
+		return result
+	participating.sort_custom(func(a: RTSUnit, b: RTSUnit) -> bool: return a.unit_id < b.unit_id)
+	result.intended_ids.sort()
+	var map := get_world_3d().get_navigation_map()
+	if not clicked.is_finite() or not field_bounds.has_point(Vector2(clicked.x, clicked.z)) or NavigationServer3D.map_get_iteration_id(map) == 0:
+		status_label.text = "Attack Move rejected · choose navigable ground"
+		return result
+	var projected := NavigationServer3D.map_get_closest_point(map, clicked)
+	if projected.distance_to(clicked) > 0.1 or NavigationServer3D.map_get_closest_point_owner(map, clicked) != navigation_region.get_rid():
+		status_label.text = "Attack Move rejected · choose navigable ground"
+		return result
+	var participating_ids: Dictionary[int, bool] = {}
+	for unit in participating:
+		if unit.navigation_suspended:
+			status_label.text = "Attack Move rejected · navigation is updating"
+			return result
+		participating_ids[unit.unit_id] = true
+	var reserved := PackedVector3Array()
+	for unit in units:
+		if contains_unit(unit) and not participating_ids.has(unit.unit_id):
+			reserved.append(_reserved_command_destination(unit))
+	var slots := destinations.generate_slots(map, clicked, participating.size(), reserved)
+	if slots.size() != participating.size():
+		status_label.text = "Attack Move rejected · no room for destinations"
+		return result
+	var assigned := destinations.assign_slots(participating, slots)
+	var identities: Array[int] = []
+	for i in participating.size():
+		var unit := participating[i]
+		var path := NavigationServer3D.map_get_path(map, unit.global_position, assigned[i], true)
+		if path.is_empty() or path[path.size() - 1].distance_to(assigned[i]) > 0.1:
+			status_label.text = "Attack Move rejected · destination unreachable"
+			return result
+		identities.append(unit.unit_id)
+	# Validation above changes no orders; acceptance follows existing batch authority.
+	_command_version = result.generation
+	for i in participating.size():
+		if not is_instance_valid(self) or not _attack_move_context_active() or result.generation != _command_version:
+			break
+		var unit := participating[i]
+		if not is_instance_valid(unit) or not can_attack_move(unit):
+			continue
+		if unit.attack_move.issue(clicked, assigned[i], result.generation):
+			result.accepted_ids.append(identities[i])
+			result.assignments[identities[i]] = assigned[i]
+	if not is_instance_valid(self):
+		result.superseded = true
+		return result
+	if not _attack_move_context_active():
+		result.superseded = true
+		return result
+	if result.generation == _command_version:
+		last_command_slots.clear()
+		for id in result.accepted_ids:
+			last_command_slots.append(result.assignments[id])
+	return _finish_batch(result, "Attack Move order")
 
 
 func _build_field() -> void:

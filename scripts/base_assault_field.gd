@@ -10,6 +10,7 @@ const ENEMY_BASE := Rect2(16.5, -15, 7, 6)
 @export var assault_delay: float = 90.0
 @export_file("*.tscn") var restart_scene: String = "res://scenes/base_assault.tscn"
 @export var tactical_interface_enabled: bool = false
+@export var attack_move_enabled: bool = false
 var tactical_minimap: TacticalMinimap
 var control_groups: ControlGroups
 var enemy_headquarters: RTSBuilding
@@ -61,6 +62,7 @@ func register_building(building: RTSBuilding) -> void:
 
 func _ready() -> void:
 	super._ready()
+	selection.attack_move_enabled = attack_move_enabled
 	_build_match_ui()
 	var resolver := ResultResolver.new()
 	resolver.field = self
@@ -165,6 +167,7 @@ func resolve_result() -> void:
 	credits.active = false
 	placement.cancel()
 	selection.cancel_gesture()
+	selection.cancel_attack_move_targeting()
 	selection._pending_picks.clear()
 	selection.process_mode = Node.PROCESS_MODE_DISABLED
 	for unit in units.duplicate():
@@ -199,6 +202,7 @@ func restart_match() -> bool:
 	if result == Result.RUNNING or _restarting or not is_inside_tree() or is_queued_for_deletion():
 		return false
 	_restarting = true
+	selection.cancel_attack_move_targeting()
 	if is_instance_valid(control_groups):
 		control_groups.clear_groups()
 	return get_tree().change_scene_to_file(restart_scene) == OK

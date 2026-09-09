@@ -27,6 +27,7 @@ cancel_selection={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycod
 movement_debug={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194334)]}
 toggle_help={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194332)]}
 unit_stop={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":88)]}
+attack_move={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":81)]}
 control_group_1={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":49)]}
 control_group_2={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":50)]}
 control_group_3={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":51)]}

@@ -64,23 +64,25 @@ func target_actor() -> Node3D:
 	return _target.get_ref() as Node3D if _target != null else null
 
 
-func issue_attack(target: Variant, explicit_player_order: bool = true) -> bool:
+func issue_attack(target: Variant, explicit_player_order: bool = true, preserve_attack_move: bool = false) -> bool:
 	if not TeamRules.can_attack(unit.gameplay_field, unit, target) or not weapon.definition.is_valid():
 		return false
-	var version := prepare_order(PlayerCommand.ATTACK if explicit_player_order else PlayerCommand.NONE)
+	var version := prepare_order(PlayerCommand.ATTACK if explicit_player_order else PlayerCommand.NONE, preserve_attack_move)
 	_target = weakref(target)
 	target.connect("availability_changed", _on_target_availability_changed)
 	state = State.FACING if unit.global_position.distance_to(target.global_position) <= weapon.definition.attack_range else State.PURSUING
 	_pursuit_wait = pursuit_interval
 	unit.halt_motion()
-	if order_version != version:
+	if not is_instance_valid(self) or order_version != version:
 		return true # Accepted, then synchronously superseded by a legitimate listener.
 	publish_state(version)
 	return true
 
 
-func prepare_order(command: PlayerCommand) -> int:
+func prepare_order(command: PlayerCommand, preserve_attack_move: bool = false) -> int:
 	# Stage a coherent order before movement emits its own synchronous signals.
+	if command != PlayerCommand.NONE and not preserve_attack_move and is_instance_valid(unit.attack_move):
+		unit.attack_move.cancel("manual_" + PlayerCommand.keys()[command].to_lower())
 	order_version += 1
 	var old_target := target_actor()
 	if is_instance_valid(old_target) and old_target.is_connected("availability_changed", _on_target_availability_changed):
@@ -113,7 +115,8 @@ func issue_stop() -> bool:
 		return false
 	var version := prepare_order(PlayerCommand.STOP)
 	unit.halt_motion()
-	publish_state(version)
+	if is_instance_valid(self):
+		publish_state(version)
 	return true
 
 
@@ -122,7 +125,8 @@ func _end_order(reason: String) -> void:
 	state = State.TARGET_INVALIDATED
 	end_reason = reason
 	unit.halt_motion()
-	publish_state(version)
+	if is_instance_valid(self):
+		publish_state(version)
 
 
 func _physics_process(delta: float) -> void:
@@ -153,7 +157,10 @@ func _physics_process(delta: float) -> void:
 		_has_chase = false
 		if unit.moving:
 			unit.halt_motion()
-			if order_version != version:
+			if not is_instance_valid(self) or order_version != version:
+				return
+			if not TeamRules.can_attack(unit.gameplay_field, unit, target):
+				_end_order("target_unavailable")
 				return
 		unit.face_toward(target.global_position, turn_speed, delta)
 		if distance > weapon.definition.attack_range:
@@ -199,7 +206,8 @@ func _physics_process(delta: float) -> void:
 		_pursuit_wait = 0.0
 		if not _has_chase or target.global_position.distance_to(_last_target_position) >= target_move_threshold or not unit.moving:
 			_update_pursuit(target, version)
-	publish_state(version)
+	if is_instance_valid(self):
+		publish_state(version)
 
 
 func _clear_fire_line() -> void:
@@ -237,7 +245,7 @@ func _update_pursuit(target: Node3D, version: int) -> void:
 	else:
 		_last_recovery_count = 0
 		unit.move_to(destination, true)
-	if order_version != version:
+	if not is_instance_valid(self) or order_version != version:
 		return
 
 
@@ -249,15 +257,25 @@ func _on_target_availability_changed() -> void:
 func _on_own_availability_changed() -> void:
 	if _death_handled:
 		return
+	# Local ownership is an attack-move prerequisite, separate from membership
+	# used by ordinary combat. Retire an automatic leg before any halt callbacks.
+	if is_instance_valid(unit.attack_move) and unit.attack_move.end_if_source_unavailable():
+		return
 	if not TeamRules.is_combat_member(unit.gameplay_field, unit):
+		if is_instance_valid(unit.attack_move):
+			unit.attack_move.cancel("source_unavailable")
 		var version := prepare_order(PlayerCommand.NONE)
 		unit.halt_motion()
-		publish_state(version)
+		if is_instance_valid(self):
+			publish_state(version)
 	elif target_actor() != null:
 		_on_target_availability_changed()
 
 
 func _on_damaged(_amount: float, source: Node) -> void:
+	# An active parent order owns acquisition; existing idle retaliation is unchanged.
+	if is_instance_valid(unit.attack_move) and unit.attack_move.active:
+		return
 	if retaliation_enabled and player_command == PlayerCommand.NONE and target_actor() == null and TeamRules.can_attack(unit.gameplay_field, unit, source as RTSUnit):
 		issue_attack(source as RTSUnit, false)
 
@@ -266,14 +284,20 @@ func _on_died(_source: Node) -> void:
 	if _death_handled:
 		return
 	_death_handled = true
+	if is_instance_valid(unit.attack_move):
+		unit.attack_move.cancel("source_died")
 	var version := prepare_order(PlayerCommand.NONE)
 	unit.halt_motion()
+	if not is_instance_valid(self):
+		return
 	unit.collision_layer = 0
 	unit.crowd_enabled = false
 	unit.set_physics_process(false)
 	set_physics_process(false)
 	if is_instance_valid(unit.gameplay_field):
 		unit.gameplay_field.unregister_unit(unit)
+	if not is_instance_valid(self):
+		return
 	unit.hide()
 	unit.queue_free()
 	publish_state(version)

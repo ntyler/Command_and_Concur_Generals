@@ -8,6 +8,8 @@ var identity_label: Label
 var selection_details: Label
 var context_content: VBoxContainer
 var train_button: Button
+var attack_move_button: Button
+var attack_move_hint: Label
 var progress_bar: ProgressBar
 var feedback: Label
 var rows: GridContainer
@@ -43,6 +45,16 @@ func _ready() -> void:
 	selection_details = _label(context_content, "")
 	selection_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	selection_details.add_theme_font_size_override("font_size", 14)
+	attack_move_button = Button.new()
+	attack_move_button.text = "Attack Move · Q"
+	attack_move_button.focus_mode = Control.FOCUS_NONE
+	attack_move_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(attack_move_button)
+	attack_move_button.pressed.connect(_attack_move)
+	attack_move_hint = _label(column, "")
+	attack_move_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	attack_move_hint.add_theme_font_size_override("font_size", 14)
+	attack_move_hint.add_theme_color_override("font_color", Color("ffce78"))
 	train_button = Button.new()
 	train_button.focus_mode = Control.FOCUS_NONE
 	train_button.add_theme_font_size_override("font_size", 14)
@@ -61,6 +73,7 @@ func _ready() -> void:
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	feedback.add_theme_font_size_override("font_size", 14)
 	field.selection.selection_changed.connect(_selection_changed)
+	field.selection.attack_move_targeting_changed.connect(_refresh)
 	field.credits.changed.connect(_credits_changed)
 	get_viewport().size_changed.connect(_layout)
 	minimum_size_changed.connect(_layout)
@@ -109,6 +122,12 @@ func _refresh() -> void:
 			_observed.changed.connect(_refresh)
 	credit_label.text = "Credits  %d" % field.credits.balance(field.selection.friendly_owner_id)
 	_show_selection(building, units)
+	attack_move_button.visible = field.selection.has_attack_move_selection()
+	attack_move_button.disabled = field.selection.attack_move_targeting
+	attack_move_hint.visible = field.selection.attack_move_targeting
+	attack_move_hint.text = "Attack Move · " + field.selection.attack_move_feedback + "\nRight-click / Esc · Cancel"
+	if field.selection.attack_move_targeting:
+		feedback.text = "" # Pending right-click cancels; ordinary command hints resume afterward.
 	train_button.visible = producer != null
 	progress_bar.visible = producer != null
 	for row in rows.get_children():
@@ -199,6 +218,8 @@ func _health_text(health: UnitHealth) -> String:
 
 
 func _unit_status(unit: RTSUnit) -> String:
+	if is_instance_valid(unit.attack_move) and unit.attack_move.active:
+		return "Engaging" if is_instance_valid(unit.attack_move.target_actor()) else "Attack-moving"
 	if is_instance_valid(unit.combat):
 		match unit.combat.state:
 			CombatController.State.PURSUING: return "Pursuing target"
@@ -240,6 +261,8 @@ func _observe_context(actor: Node) -> void:
 	if actor is RTSUnit:
 		var unit := actor as RTSUnit
 		_watch(unit, &"movement_state_changed", 1)
+		if is_instance_valid(unit.attack_move):
+			_watch(unit.attack_move, &"changed")
 		if is_instance_valid(unit.combat):
 			_watch(unit.combat, &"state_changed", 1)
 			_watch(unit.combat.health, &"damaged", 2)
@@ -272,6 +295,11 @@ func _train() -> void:
 	var result := building.production.enqueue(field.selection.friendly_owner_id, building.recipe)
 	if is_instance_valid(self) and not result.accepted:
 		feedback.text = result.reason
+
+
+func _attack_move() -> void:
+	if _context_active():
+		field.selection.begin_attack_move()
 
 
 func _cancel(producer: UnitProduction, job_id: int) -> void:
@@ -315,4 +343,6 @@ func _exit_tree() -> void:
 			field.credits.changed.disconnect(_credits_changed)
 		if is_instance_valid(field.selection) and field.selection.selection_changed.is_connected(_selection_changed):
 			field.selection.selection_changed.disconnect(_selection_changed)
+		if is_instance_valid(field.selection) and field.selection.attack_move_targeting_changed.is_connected(_refresh):
+			field.selection.attack_move_targeting_changed.disconnect(_refresh)
 	field = null

@@ -31,6 +31,7 @@ signal availability_changed
 @export var maximum_health: float = 100.0
 @export var retaliation_enabled: bool = false
 var combat: CombatController
+var attack_move: AttackMoveOrder
 var gameplay_field: TestField
 
 enum MovementState { ARRIVED, TRAVELLING, CONGESTED, RECOVERING, FAILED }
@@ -161,6 +162,10 @@ func _ready() -> void:
 		combat.unit = self
 		combat.retaliation_enabled = retaliation_enabled
 		add_child(combat)
+		if combat_weapon != null:
+			attack_move = AttackMoveOrder.new()
+			attack_move.unit = self
+			add_child(attack_move)
 		if combat_weapon != null and combat_weapon.mode == WeaponDefinition.Mode.HITSCAN:
 			_visual.scale = Vector3(0.65, 1.2, 0.65)
 
@@ -192,14 +197,14 @@ func is_alive() -> bool:
 	return combat == null or (is_instance_valid(combat.health) and combat.health.is_alive())
 
 
-func move_to(destination: Vector3, combat_pursuit: bool = false) -> bool:
+func move_to(destination: Vector3, combat_pursuit: bool = false, preserve_attack_move: bool = false) -> bool:
 	if not is_alive() or not is_inside_tree() or is_queued_for_deletion():
 		return false
 	if combat != null and not TeamRules.is_combat_member(gameplay_field, self):
 		return false
 	var combat_version: int = -1
 	if combat != null and not combat_pursuit:
-		combat_version = combat.prepare_order(CombatController.PlayerCommand.MOVE)
+		combat_version = combat.prepare_order(CombatController.PlayerCommand.MOVE, preserve_attack_move)
 	order_version += 1
 	var moving_order := order_version
 	_submitted_order = -1

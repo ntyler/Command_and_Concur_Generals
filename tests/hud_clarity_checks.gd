@@ -76,17 +76,32 @@ func _hud_pick_building(building: RTSBuilding) -> void:
 	_check(battle.selection.selected_building() == building, "viewport selects %s" % building.display_name())
 
 
+func _hud_viewport_rect(control: Control) -> Rect2:
+	# Help/context and objectives belong to different CanvasLayers.
+	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+
+
 func _hud_layout(dimensions: Vector2i) -> void:
 	root.size = dimensions
 	await _frames(8)
-	var map_rect := battle.tactical_minimap.get_global_rect()
-	var context_rect := battle.production_panel.get_global_rect()
-	var help_rect := battle.help_panel.get_global_rect()
-	var objective_rect := (battle.objective_label.get_parent() as Control).get_global_rect()
+	var map_rect := _hud_viewport_rect(battle.tactical_minimap)
+	var context_rect := _hud_viewport_rect(battle.production_panel)
+	var help_rect := _hud_viewport_rect(battle.help_panel)
+	# Include the enclosing panel's margins, not just its inner content column.
+	var objective := battle.objective_label.get_parent().get_parent() as PanelContainer
+	var objective_rect := _hud_viewport_rect(objective)
 	var viewport := root.get_visible_rect()
+	print("HUD_LAYOUT: viewport=%s help_open=%s help=%s objective=%s context=%s minimap=%s" % [dimensions, battle.help_panel.is_open(), help_rect, objective_rect, context_rect, map_rect])
 	_check(viewport.encloses(map_rect) and viewport.encloses(context_rect) and viewport.encloses(help_rect) and viewport.encloses(objective_rect), "all HUD panels fit actual viewport %s" % dimensions)
 	_check(not map_rect.intersects(context_rect) and not map_rect.intersects(help_rect) and not map_rect.intersects(objective_rect), "minimap is unobscured at %s" % dimensions)
 	_check(not help_rect.intersects(context_rect) and not help_rect.intersects(objective_rect) and not context_rect.intersects(objective_rect), "help, context and objective panels do not overlap at %s" % dimensions)
+	if battle.help_panel.is_open():
+		_check(help_rect.end.y + 12.0 <= objective_rect.position.y, "expanded Help retains at least 12px clearance above outer objective panel at %s" % dimensions)
+		var readable := true
+		for child in battle.help_panel.help_content.get_children():
+			if child is Label:
+				readable = readable and help_rect.encloses(_hud_viewport_rect(child)) and child.size.y >= child.get_minimum_size().y and child.get_theme_font_size("font_size") >= 14 and not child.clip_text
+		_check(readable, "all expanded Help instructions remain enclosed, unclipped and at least 14px at %s" % dimensions)
 	for button in battle.production_panel.cancel_buttons.values():
 		_check(viewport.encloses(button.get_global_rect()) and not button.get_global_rect().intersects(map_rect), "queue cancellation remains accessible at %s" % dimensions)
 
