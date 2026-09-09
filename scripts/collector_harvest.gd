@@ -63,7 +63,7 @@ func can_order(target: Node3D, loop: bool) -> bool:
 	var field := unit.gameplay_field as HarvestField
 	if not field.harvest_member(unit) or not _configured(unit) or not is_instance_valid(target):
 		return false
-	var hq := field.headquarters if loop else target as RTSBuilding
+	var hq := field.headquarters_for_owner(unit.owner_id) if loop else target as RTSBuilding
 	if not is_instance_valid(hq) or not field.valid_dropoff(hq, unit.owner_id):
 		last_rejection = "No owned headquarters"
 		return false
@@ -89,7 +89,7 @@ func issue(target: Node3D, loop: bool) -> bool:
 	_field = weakref(field)
 	_owner = unit.owner_id
 	_cache = weakref(target) if loop else null
-	_hq = weakref(field.headquarters if loop else target)
+	_hq = weakref(field.headquarters_for_owner(unit.owner_id) if loop else target)
 	automatic = loop
 	last_rejection = ""
 	_begin_trip(not loop or cargo >= unit.cargo_capacity)

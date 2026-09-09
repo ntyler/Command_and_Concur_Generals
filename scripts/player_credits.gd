@@ -8,9 +8,9 @@ var _balances: Dictionary[int, int] = {}
 var active: bool = true
 
 
-func _init(owners: Array[int], starting: int) -> void:
+func _init(owners: Array[int], starting: int, owner_starts: Dictionary = {}) -> void:
 	for owner_id in owners:
-		_balances[owner_id] = maxi(0, starting)
+		_balances[owner_id] = maxi(0, int(owner_starts.get(owner_id, starting)))
 
 
 func balance(owner_id: int) -> int:

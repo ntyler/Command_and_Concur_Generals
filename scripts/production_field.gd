@@ -24,7 +24,7 @@ var _spawn_claim_radii: Array[float] = []
 
 
 func _ready() -> void:
-	credits = PlayerCredits.new([1, 2], starting_credits)
+	credits = create_credits()
 	_spawn_query = PhysicsShapeQueryParameters3D.new()
 	_spawn_query.shape = RTSUnit.body_shape()
 	_spawn_query.collision_mask = 2 | 4 | LineOfFire.BLOCKER_MASK
@@ -41,6 +41,10 @@ func _ready() -> void:
 	controls.text = "WASD / arrows / edges · Pan    Wheel · Zoom\nClick / drag / Shift · Select units\nClick owned building · Select building\nBarracks + right click ground · Set rally\nUnits + right click · Move / attack hostile\nX · Stop units    F3 · Debug (off by default)"
 	(info_panel.get_child(0).get_child(0) as Label).text = "FIELDWORK  /  PRODUCTION"
 	_on_selection_changed(0)
+
+
+func create_credits() -> PlayerCredits:
+	return PlayerCredits.new([1, 2], starting_credits)
 
 
 func _on_selection_changed(count: int) -> void:

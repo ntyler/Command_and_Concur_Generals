@@ -138,7 +138,7 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(self) or not gameplay_enabled:
 		return
 	elapsed += delta
-	if not assault_issued and elapsed >= maxf(0.0, assault_delay):
+	if uses_scripted_assault() and not assault_issued and elapsed >= maxf(0.0, assault_delay):
 		assault_issued = true # Commit before issuing commands/signals; never retry/reset orders.
 		for unit in units.duplicate():
 			if not is_instance_valid(self) or not gameplay_enabled:
@@ -146,6 +146,10 @@ func _physics_process(delta: float) -> void:
 			if contains_unit(unit) and unit.owner_id == 2 and unit.combat.issue_attack(headquarters):
 				assault_acceptances += 1
 	_update_objective()
+
+
+func uses_scripted_assault() -> bool:
+	return true
 
 
 func destroy_building(building: RTSBuilding) -> void:

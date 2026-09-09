@@ -26,6 +26,7 @@ var activity: String:
 		return "Attack-move failed" if status == Status.FAILED else "Idle"
 
 var _generation: int = 0
+var _command_owner: int = -1
 var _target: WeakRef
 var _acquisition_origin: Vector3
 var _scan_wait: float = 0.0
@@ -43,10 +44,10 @@ func target_actor() -> Node3D:
 	return _target.get_ref() as Node3D if _target != null else null
 
 
-func issue(destination: Vector3, slot: Vector3, parent_id: int) -> bool:
+func issue(destination: Vector3, slot: Vector3, parent_id: int, owner: int = -1) -> bool:
 	# No mutation or notification until every check passes. Batch dispatch also
 	# checks terrain/formation atomically before any participating unit accepts.
-	if not _source_available() or not destination.is_finite() or not slot.is_finite():
+	if not _source_available(owner) or not destination.is_finite() or not slot.is_finite():
 		return false
 	if not unit.gameplay_field.field_bounds.has_point(Vector2(destination.x, destination.z)):
 		return false
@@ -60,6 +61,7 @@ func issue(destination: Vector3, slot: Vector3, parent_id: int) -> bool:
 	var version := _generation
 	active = true
 	parent_order_id = parent_id
+	_command_owner = owner if owner >= 0 else unit.gameplay_field.selection.friendly_owner_id
 	final_destination = destination
 	final_slot = slot
 	status = Status.TRAVELLING
@@ -245,8 +247,11 @@ func _finish(result: Status, reason: String) -> void:
 	_notify_changed()
 
 
-func _source_available() -> bool:
-	return is_instance_valid(unit) and is_instance_valid(unit.gameplay_field) and unit.gameplay_field.can_attack_move(unit)
+func _source_available(owner: int = -1) -> bool:
+	if not is_instance_valid(unit) or not is_instance_valid(unit.gameplay_field):
+		return false
+	var authority := owner if owner >= 0 else (_command_owner if active else unit.gameplay_field.selection.friendly_owner_id)
+	return unit.gameplay_field.can_attack_move_for(authority, unit)
 
 
 func _target_available(target: Variant) -> bool:

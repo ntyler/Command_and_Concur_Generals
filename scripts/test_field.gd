@@ -36,6 +36,7 @@ var last_command_slots := PackedVector3Array()
 var last_command_result: CommandBatchResult
 var _command_version: int = 0
 var _next_command_generation: int = 0
+var _owner_command_versions: Dictionary[int, int] = {}
 
 
 func _ready() -> void:
@@ -262,7 +263,11 @@ func _attack_move_context_active() -> bool:
 
 
 func can_attack_move(unit: RTSUnit) -> bool:
-	if not _attack_move_context_active() or not TeamRules.is_controlled(self, unit, selection.friendly_owner_id):
+	return is_instance_valid(selection) and can_attack_move_for(selection.friendly_owner_id, unit)
+
+
+func can_attack_move_for(owner: int, unit: RTSUnit) -> bool:
+	if not _attack_move_context_active() or not TeamRules.is_controlled(self, unit, owner):
 		return false
 	if not is_instance_valid(unit.combat) or not is_instance_valid(unit.combat.weapon) or not is_instance_valid(unit.attack_move):
 		return false
@@ -294,27 +299,73 @@ func issue_attack_move(clicked: Vector3) -> CommandBatchResult:
 		return result
 	if result.superseded or not _attack_move_context_active() or selected.is_empty():
 		return result
+	return _dispatch_attack_move(result, selected, selection.friendly_owner_id, clicked)
+
+
+func _owner_authority(owner: int) -> int:
+	return _command_version if owner == selection.friendly_owner_id else _owner_command_versions.get(owner, 0)
+
+
+func _commit_owner_command(owner: int, generation: int) -> void:
+	if owner == selection.friendly_owner_id:
+		_command_version = generation
+	else:
+		_owner_command_versions[owner] = generation
+
+
+func _owner_feedback(owner: int, message: String) -> void:
+	if owner == selection.friendly_owner_id:
+		status_label.text = message
+
+
+func _finish_owner_batch(owner: int, result: CommandBatchResult, description: String) -> CommandBatchResult:
+	if owner == selection.friendly_owner_id:
+		return _finish_batch(result, description)
+	result.superseded = result.generation != _owner_authority(owner)
+	return result
+
+
+func _explicit_batch_selection(result: CommandBatchResult, candidates: Array) -> Array[RTSUnit]:
+	var selected: Array[RTSUnit] = []
+	if not _attack_move_context_active():
+		return selected
+	for candidate in candidates:
+		if is_instance_valid(candidate) and candidate is RTSUnit and not result.intended_ids.has(candidate.unit_id):
+			selected.append(candidate)
+			result.intended_ids.append(candidate.unit_id)
+	return selected
+
+
+func issue_attack_move_for(owner: int, candidates: Array, clicked: Vector3) -> CommandBatchResult:
+	var result := _new_batch()
+	var selected := _explicit_batch_selection(result, candidates)
+	if selected.is_empty():
+		return result
+	return _dispatch_attack_move(result, selected, owner, clicked)
+
+
+func _dispatch_attack_move(result: CommandBatchResult, selected: Array[RTSUnit], owner: int, clicked: Vector3) -> CommandBatchResult:
 	var participating: Array[RTSUnit] = []
 	for unit in selected:
-		if is_instance_valid(unit) and can_attack_move(unit):
+		if is_instance_valid(unit) and can_attack_move_for(owner, unit):
 			participating.append(unit)
 	if participating.is_empty():
-		status_label.text = "Attack Move rejected · select a Rifle or Rocket Vehicle"
+		_owner_feedback(owner, "Attack Move rejected · select a Rifle or Rocket Vehicle")
 		return result
 	participating.sort_custom(func(a: RTSUnit, b: RTSUnit) -> bool: return a.unit_id < b.unit_id)
 	result.intended_ids.sort()
 	var map := get_world_3d().get_navigation_map()
 	if not clicked.is_finite() or not field_bounds.has_point(Vector2(clicked.x, clicked.z)) or NavigationServer3D.map_get_iteration_id(map) == 0:
-		status_label.text = "Attack Move rejected · choose navigable ground"
+		_owner_feedback(owner, "Attack Move rejected · choose navigable ground")
 		return result
 	var projected := NavigationServer3D.map_get_closest_point(map, clicked)
 	if projected.distance_to(clicked) > 0.1 or NavigationServer3D.map_get_closest_point_owner(map, clicked) != navigation_region.get_rid():
-		status_label.text = "Attack Move rejected · choose navigable ground"
+		_owner_feedback(owner, "Attack Move rejected · choose navigable ground")
 		return result
 	var participating_ids: Dictionary[int, bool] = {}
 	for unit in participating:
 		if unit.navigation_suspended:
-			status_label.text = "Attack Move rejected · navigation is updating"
+			_owner_feedback(owner, "Attack Move rejected · navigation is updating")
 			return result
 		participating_ids[unit.unit_id] = true
 	var reserved := PackedVector3Array()
@@ -323,7 +374,7 @@ func issue_attack_move(clicked: Vector3) -> CommandBatchResult:
 			reserved.append(_reserved_command_destination(unit))
 	var slots := destinations.generate_slots(map, clicked, participating.size(), reserved)
 	if slots.size() != participating.size():
-		status_label.text = "Attack Move rejected · no room for destinations"
+		_owner_feedback(owner, "Attack Move rejected · no room for destinations")
 		return result
 	var assigned := destinations.assign_slots(participating, slots)
 	var identities: Array[int] = []
@@ -331,18 +382,18 @@ func issue_attack_move(clicked: Vector3) -> CommandBatchResult:
 		var unit := participating[i]
 		var path := NavigationServer3D.map_get_path(map, unit.global_position, assigned[i], true)
 		if path.is_empty() or path[path.size() - 1].distance_to(assigned[i]) > 0.1:
-			status_label.text = "Attack Move rejected · destination unreachable"
+			_owner_feedback(owner, "Attack Move rejected · destination unreachable")
 			return result
 		identities.append(unit.unit_id)
 	# Validation above changes no orders; acceptance follows existing batch authority.
-	_command_version = result.generation
+	_commit_owner_command(owner, result.generation)
 	for i in participating.size():
-		if not is_instance_valid(self) or not _attack_move_context_active() or result.generation != _command_version:
+		if not is_instance_valid(self) or not _attack_move_context_active() or result.generation != _owner_authority(owner):
 			break
 		var unit := participating[i]
-		if not is_instance_valid(unit) or not can_attack_move(unit):
+		if not is_instance_valid(unit) or not can_attack_move_for(owner, unit):
 			continue
-		if unit.attack_move.issue(clicked, assigned[i], result.generation):
+		if unit.attack_move.issue(clicked, assigned[i], result.generation, owner):
 			result.accepted_ids.append(identities[i])
 			result.assignments[identities[i]] = assigned[i]
 	if not is_instance_valid(self):
@@ -351,11 +402,11 @@ func issue_attack_move(clicked: Vector3) -> CommandBatchResult:
 	if not _attack_move_context_active():
 		result.superseded = true
 		return result
-	if result.generation == _command_version:
+	if result.generation == _owner_authority(owner) and owner == selection.friendly_owner_id:
 		last_command_slots.clear()
 		for id in result.accepted_ids:
 			last_command_slots.append(result.assignments[id])
-	return _finish_batch(result, "Attack Move order")
+	return _finish_owner_batch(owner, result, "Attack Move order")
 
 
 func _build_field() -> void:

@@ -26,8 +26,8 @@ func _ready() -> void:
 
 
 func _build_visual() -> void:
-	_add_box(Vector3(0.85, 0.25, 1.5), Vector3(0, 0.38, 0), Color("42c5cc"))
-	_add_box(Vector3(0.8, 0.6, 0.6), Vector3(0, 0.8, -0.46), Color("b3e7df"))
+	_add_box(Vector3(0.85, 0.25, 1.5), Vector3(0, 0.38, 0), TeamRules.team_color(owner_id))
+	_add_box(Vector3(0.8, 0.6, 0.6), Vector3(0, 0.8, -0.46), Color("b3e7df") if owner_id == 1 else Color("efb5a9"))
 	_add_box(Vector3(0.78, 0.35, 0.75), Vector3(0, 0.67, 0.33), Color("ffd680"))
 	for x in [-0.46, 0.46]:
 		for z in [-0.5, 0.5]:

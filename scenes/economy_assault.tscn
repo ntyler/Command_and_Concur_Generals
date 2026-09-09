@@ -1,0 +1,14 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/economy_assault_field.gd" id="1"]
+[ext_resource type="Resource" path="res://construction/vehicle_factory.tres" id="2"]
+[ext_resource type="Resource" path="res://scenarios/enemy_economy.tres" id="3"]
+
+[node name="EconomyAssault" type="Node3D"]
+script = ExtResource("1")
+vehicle_factory_definition = ExtResource("2")
+enemy_config = ExtResource("3")
+restart_scene = "res://scenes/economy_assault.tscn"
+tactical_interface_enabled = true
+attack_move_enabled = true
+

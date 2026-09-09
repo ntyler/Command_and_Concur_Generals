@@ -4,7 +4,7 @@
 
 The user explicitly authorized forward feature development from the current working implementation, superseding the earlier requirement to resolve historical movement failures before starting another milestone.
 
-**Outstanding movement issues are DEFERRED KNOWN LIMITATIONS; their engineering status remains UNRESOLVED. They do not automatically block authorized feature development, now Milestone 9. Full movement acceptance and full Milestone 5 regression acceptance have not passed.** This is a scheduling decision, not a bug closure, test waiver or claim of movement reliability.
+**Outstanding movement issues are DEFERRED KNOWN LIMITATIONS; their engineering status remains UNRESOLVED. They do not automatically block authorized feature development, now completed through Milestone 10. Full movement acceptance and full Milestone 5 regression acceptance have not passed.** This is a scheduling decision, not a bug closure, test waiver or claim of movement reliability.
 
 This decision supersedes earlier instructions in milestone/investigation reports that all subsequent work must remain blocked or that another movement investigation must come next. Those reports retain their historical results, failures, reproduction constraints and evidence. Closed historical execution budgets are not reopened.
 
@@ -29,6 +29,7 @@ At the priority decision, the repository documented milestones through Milestone
 | **7 — implemented; feature checks pass** | **Vehicle Factory and existing Rocket Vehicle production, through shared construction/queues, in a combined-arms assault variant. All A–G feature groups pass automated headless/graphical validation, including the zero-credit earned-army victory loop. Movement acceptance remains separate; see [results and limitations](milestone-7.md).** |
 | **8 / 8.1 — complete** | **Fully revealed minimap, groups 1–9, compact Help and contextual HUD in the combined-arms scene. All eight final acceptance groups pass in [Milestone 8.1](milestone-8.1.md); the earlier [M8 report](milestone-8.md) retains its historical scaffold.** |
 | **9 — attack-move; complete** | **All eight acceptance groups PASS. Q/button battlefield or minimap targeting for existing Rifles/Rockets, bounded automatic engagements and resumed original slots through existing movement/combat. Expanded/collapsed Help verified at 1280x720 and 1920x1080. See [Milestone 9](milestone-9.md).** |
+| **10 — enemy economy and repeat assaults; complete** | **All eight feature groups PASS in the separate economy-assault scene. Real harvesting funds paid Rifle production, staging and existing attack-move waves. Opponent/integration: 261 passing assertions in both modes. Full matrix: 59/60 executions, 7,393 assertions, three graphical movement-stress failures of unknown attribution, exit 1. See [Milestone 10](milestone-10.md).** |
 
 Milestone 6 gives construction, harvesting, production and combat a shared match objective. It uses a small flat map and existing units, resources and commands. Strategic AI, additional economic systems and general movement reliability work remain outside this milestone.
 
@@ -42,7 +43,15 @@ Final M8/8.1 acceptance is saved in [Milestone 8.1](milestone-8.1.md): 18 post-f
 
 The [M9 report](milestone-9.md) records the original complete matrix (**56 executions / 7,116 checks**) and final source coverage: **50 reused executions / 6,277 checks + six post-layout executions / 855 checks**, all passing with zero failures/native error lines and exits 0. The affected reruns cover HUD, attack-move UI and tactical interface in both modes, including produced Rifle/Rocket damage, independent physical resumed travel and retained distinct slot arrival. Source hashes, corrected Help captures, earlier failed executions and all eight PASS acceptance groups are saved. No human playtest occurred.
 
-Starting forces, credits, costs, resource amounts, production timing, the 90-second scripted enemy assault and result/Restart rules remain unchanged. Fog of war, patrol/guard, stances, idle acquisition, additional gameplay types, strategic AI, multiplayer, automatic flanking and movement investigation remain outside scope. **Milestone 10 is not started or authorized by this task.**
+The completed M9 scenes retain their starting forces, credits, costs, resource amounts, production timing, 90-second scripted enemy assault and result/Restart rules.
+
+**Milestone 10 — enemy economy and repeat assaults is COMPLETE (2026-09-08)** in the separate `res://scenes/economy_assault.tscn`. Open it and press F6, or use the installed Godot with `--path . res://scenes/economy_assault.tscn`. A bounded scene-local controller uses real owner-isolated harvesting, paid Rifle queues, assembled produced troops and existing attack-move. Defaults remain 300 enemy credits, a new finite 2000-supply cache, 0.5-second planning, 90-second earliest wave, 60-second launch interval, preferred/maximum three recipients, 30-second partial wait and a 12-unit combat population including pending deployments. The first threshold is earliest eligibility; production and staging can delay launch. Earlier playable scenes retain their one-shot assaults.
+
+The [M10 report](milestone-10.md) saves all eight PASS feature groups, actual commands/exits, original failed runs and normal captures at 1280x720 and 1920x1080. The completed, source-matched matrix has **60/60 completed executions, 59 passing, 7,393 assertions, three failures and phase exit 1**. Opponent checks pass **96 headless / 98 graphical**, and zero-credit integration passes **33 / 34**, including real damage by every member of two paid waves and exact deposit/spending reconciliation. These 261 assertions are part of the matrix, not an additional acceptance total. No runtime changes or engine reruns were needed during final recovery; only the three handoff documents changed.
+
+**Unknown attribution:** graphical `movement_stress_checks` failed three `choke_30` arrival/traversal/settling assertions for unit 13. This occurrence is not established as pre-existing or newly introduced. Its failed log and metrics remain linked in M10, without retries or historical movement investigation. No M10 feature failures or demonstrated newly introduced regressions remain; documented deferred movement findings remain separately unresolved. Feature completion does not claim a clean full regression matrix or a human playtest.
+
+No strategic planner, rebuilds, free reinforcement income, fog of war, patrol/guard, stances, new gameplay unit types, multiplayer, automatic flanking or movement investigation is included. **Milestone 11 is not started or authorized by this task.**
 
 ## Baseline and validation provenance
 

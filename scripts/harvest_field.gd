@@ -119,6 +119,15 @@ func _release_target(id: int) -> void:
 	_access_claims.erase(id)
 
 
+func headquarters_for_owner(owner: int) -> RTSBuilding:
+	if valid_dropoff(headquarters, owner):
+		return headquarters
+	for building in registered_buildings():
+		if valid_dropoff(building, owner):
+			return building
+	return null
+
+
 func valid_dropoff(building: RTSBuilding, owner: int) -> bool:
 	return is_instance_valid(building) and contains_building(building) and building.kind == RTSBuilding.Kind.HEADQUARTERS and building.owner_id == owner
 
@@ -209,26 +218,41 @@ func _issue_resource(target: Node3D, automatic: bool) -> CommandBatchResult:
 	var selected := _batch_selection(result)
 	if result.superseded or selected.is_empty():
 		return result
+	return _dispatch_resource(result, selected, selection.friendly_owner_id, target, automatic)
+
+
+func issue_harvest_for(owner: int, candidates: Array, cache: SupplyCache) -> CommandBatchResult:
+	var result := _new_batch()
+	var selected := _explicit_batch_selection(result, candidates)
+	if selected.is_empty():
+		return result
+	return _dispatch_resource(result, selected, owner, cache, true)
+
+
+func _dispatch_resource(result: CommandBatchResult, selected: Array[RTSUnit], owner: int, target: Node3D, automatic: bool) -> CommandBatchResult:
 	var eligible := false
 	for unit in selected:
-		if unit is CollectorTruck and (unit as CollectorTruck).harvesting.can_order(target, automatic):
+		if is_instance_valid(unit) and unit is CollectorTruck and TeamRules.is_controlled(self, unit, owner) and (unit as CollectorTruck).harvesting.can_order(target, automatic):
 			eligible = true
 	if not eligible:
-		status_label.text = "Harvest rejected · select collector, nonempty supply and owned HQ"
+		_owner_feedback(owner, "Harvest rejected · select collector, nonempty supply and owned HQ")
 		return result
-	_command_version = result.generation
+	_commit_owner_command(owner, result.generation)
 	for i in selected.size():
-		if not is_instance_valid(self) or _command_version != result.generation:
+		if not is_instance_valid(self) or not _attack_move_context_active() or _owner_authority(owner) != result.generation:
 			break
 		var unit := selected[i]
-		if not is_instance_valid(unit) or not unit is CollectorTruck or not is_instance_valid(target):
+		if not is_instance_valid(unit) or not unit is CollectorTruck or not TeamRules.is_controlled(self, unit, owner) or not is_instance_valid(target):
 			continue
 		if (unit as CollectorTruck).harvesting.issue(target, automatic):
 			result.accepted_ids.append(result.intended_ids[i])
 	if not is_instance_valid(self):
 		result.superseded = true
 		return result
-	return _finish_batch(result, "Harvest" if automatic else "Deposit once")
+	if not _attack_move_context_active():
+		result.superseded = true
+		return result
+	return _finish_owner_batch(owner, result, "Harvest" if automatic else "Deposit once")
 
 
 func _exit_tree() -> void:
