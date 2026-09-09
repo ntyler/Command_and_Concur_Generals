@@ -289,10 +289,14 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 
 
 func cancel(requester: int, site_id: int) -> ConstructionResult:
+	return _cancel(requester, site_id, field())
+
+
+func _cancel(requester: int, site_id: int, owner: ConstructionField) -> ConstructionResult:
 	var site := sites.get(site_id) as ConstructionSite
-	if field() == null or site == null or requester != site.owner_id or not site.cancellable():
+	if owner == null or site == null or requester != site.owner_id or not site.cancellable():
 		return ConstructionResult.reject("Only an owned unfinished site can be cancelled")
-	var wallet := field().credits
+	var wallet := owner.credits
 	site.state = ConstructionSite.State.CANCELLING
 	site.reason = "Cancelled and refunded; restoring navigation"
 	if not site.refunded:
@@ -306,8 +310,8 @@ func cancel(requester: int, site_id: int) -> ConstructionResult:
 		body.operational = false
 		body.collision_layer = 0
 		var body_id := body.get_instance_id()
-		field()._buildings.erase(body_id)
-		field()._producers.erase(body_id)
+		owner._buildings.erase(body_id)
+		owner._producers.erase(body_id)
 		producer = body.production
 		body.queue_free()
 	# Detach silently until body, wallet and cleanup generation are committed.
@@ -453,16 +457,19 @@ func _reconcile_barrier_departure(identity: int) -> void:
 
 
 func _reconcile_departure(site_id: int) -> void:
-	if field() == null:
+	# A real deletion/reparent still needs lifecycle cleanup during manual pause.
+	# The player-facing cancel path remains gated by field(); topology waits for resume.
+	var owner := navigation.field()
+	if owner == null or not owner._match_gameplay_enabled:
 		return
 	var site := sites.get(site_id) as ConstructionSite
 	if site == null:
 		return
 	var body := site.building()
-	if is_instance_valid(body) and field().contains_building(body):
+	if is_instance_valid(body) and owner.contains_building(body):
 		return # Same-field reparent kept its identity.
 	if site.cancellable():
-		cancel(site.owner_id, site_id)
+		_cancel(site.owner_id, site_id, owner)
 	elif site.state == ConstructionSite.State.OPERATIONAL:
 		# Lifecycle removal is not player selling. No construction refund.
 		sites.erase(site_id)

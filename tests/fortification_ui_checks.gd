@@ -31,7 +31,9 @@ func _fort_layouts(label: String, include_help: bool = true) -> void:
 			await _hud_layout(dimensions)
 			await _fort_capture("%s_help_%dx%d" % [label, dimensions.x, dimensions.y])
 			await _hud_key(KEY_ESCAPE)
-			_check(not fort.help_panel.is_open(), "Escape closes fortification Help without a world order")
+			_check(not fort.help_panel.is_open() and fort.manual_pause_active, "Escape closes fortification Help and pauses without a world order")
+			await _hud_key(KEY_ESCAPE)
+			_check(not fort.manual_pause_active, "Escape resumes the fortified match")
 	root.size = Vector2i(1280, 720)
 	await _frames(4)
 
@@ -75,7 +77,9 @@ func _fort_normal_ui() -> void:
 	await _frames(4)
 	_check(fort.placement.active and fort.placement.definition == GATE, "Gate construction choice uses the same authoritative placement preview")
 	await _hud_key(KEY_ESCAPE)
-	_check(not fort.placement.active and fort.credits.balance(1) == 1000, "Escape cancels Gate placement without payment")
+	_check(not fort.placement.active and fort.manual_pause_active and fort.credits.balance(1) == 1000, "Escape cancels Gate placement and pauses without payment")
+	await _hud_key(KEY_ESCAPE)
+	_check(not fort.manual_pause_active, "Escape resumes after cancelled Gate placement")
 
 
 func _fort_pick_gate(gate: BarrierBuilding) -> void:

@@ -25,6 +25,7 @@ var result_overlay: ColorRect
 var result_label: Label
 var restart_button: Button
 var help_panel: RTSHelpPanel
+var pause_menu: RTSPauseMenu
 
 class ResultResolver extends Node:
 	var field: BaseAssaultField
@@ -61,6 +62,8 @@ func register_building(building: RTSBuilding) -> void:
 
 
 func _ready() -> void:
+	# A test/host may itself process while paused; the match always pauses.
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	super._ready()
 	selection.attack_move_enabled = attack_move_enabled
 	_build_match_ui()
@@ -84,6 +87,10 @@ func _ready() -> void:
 		tactical_minimap.groups = control_groups
 		get_node("ControlsFeedback").add_child(tactical_minimap)
 		_compact_help()
+	# Last child owns unhandled Escape, after ordinary GUI has had first refusal.
+	pause_menu = RTSPauseMenu.new()
+	pause_menu.field = self
+	add_child(pause_menu)
 
 
 func _compact_help() -> void:
@@ -93,7 +100,6 @@ func _compact_help() -> void:
 	var old_guide := info_panel
 	old_guide.get_parent().remove_child(old_guide)
 	old_guide.queue_free()
-	# Last input observer: open Help owns Escape before selection's _input hook.
 	# The layer has no full-screen Control and cannot catch battlefield clicks.
 	var layer := CanvasLayer.new()
 	layer.name = "HelpHUD"
@@ -120,6 +126,10 @@ func _layout_placement_status() -> void:
 
 
 func _exit_tree() -> void:
+	# Leaving a paused match must never leave its replacement globally frozen.
+	if manual_pause_active:
+		manual_pause_active = false
+		get_tree().paused = false
 	if get_viewport().size_changed.is_connected(_layout_placement_status):
 		get_viewport().size_changed.disconnect(_layout_placement_status)
 	if is_instance_valid(help_panel) and help_panel.resized.is_connected(_layout_placement_status):
@@ -130,6 +140,8 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if manual_pause_active:
+		return # Manual callbacks must not advance even topology while paused.
 	if not gameplay_enabled:
 		# Finish only the already committed destruction's topology cleanup.
 		construction.navigation.advance(delta)
@@ -162,7 +174,7 @@ func destroy_building(building: RTSBuilding) -> void:
 
 
 func resolve_result() -> void:
-	if result != Result.RUNNING or _lost_headquarters.is_empty() or is_queued_for_deletion():
+	if manual_pause_active or result != Result.RUNNING or _lost_headquarters.is_empty() or is_queued_for_deletion():
 		return
 	var own_lost := _lost_headquarters.has(1)
 	var enemy_lost := _lost_headquarters.has(2)
@@ -170,10 +182,7 @@ func resolve_result() -> void:
 	gameplay_enabled = false
 	credits.active = false
 	construction.pause_all()
-	placement.cancel()
-	selection.cancel_gesture()
-	selection.cancel_attack_move_targeting()
-	selection._pending_picks.clear()
+	_clear_uncommitted_input()
 	selection.process_mode = Node.PROCESS_MODE_DISABLED
 	for unit in units.duplicate():
 		if not is_instance_valid(self):
@@ -197,20 +206,68 @@ func resolve_result() -> void:
 	if is_instance_valid(help_panel):
 		help_panel.set_open(false)
 		help_panel.hide()
+	if is_instance_valid(pause_menu):
+		pause_menu.close()
 	result_label.text = ["", "VICTORY", "DEFEAT", "DRAW"][result]
 	result_overlay.show()
 	_update_objective()
 	match_finished.emit(result) # Final notification; no state writes after callbacks.
 
 
+func pause_match() -> bool:
+	if not is_inside_tree() or is_queued_for_deletion() or _restarting or manual_pause_active or not gameplay_enabled or result != Result.RUNNING:
+		return false
+	# Block signal/deferred commands before cancelling only uncommitted input.
+	manual_pause_active = true
+	get_tree().paused = true
+	_clear_uncommitted_input()
+	if is_instance_valid(help_panel):
+		help_panel.set_open(false)
+	pause_menu.open()
+	return true
+
+
+func resume_match() -> bool:
+	if not is_inside_tree() or is_queued_for_deletion() or _restarting or not manual_pause_active or result != Result.RUNNING:
+		return false
+	_clear_uncommitted_input()
+	pause_menu.close()
+	manual_pause_active = false
+	get_tree().paused = false
+	return true
+
+
+func _clear_uncommitted_input() -> void:
+	placement.cancel()
+	selection.cancel_gesture()
+	selection.cancel_attack_move_targeting()
+	selection._pending_picks.clear()
+	if is_instance_valid(selection.tempest_targeting):
+		selection.tempest_targeting.cancel()
+	if is_instance_valid(control_groups):
+		control_groups.reset_input_timing()
+	if is_instance_valid(tactical_minimap):
+		tactical_minimap.cancel_pending_input()
+	if is_instance_valid(camera_rig):
+		camera_rig.cancel_pending_input()
+
+
 func restart_match() -> bool:
-	if result == Result.RUNNING or _restarting or not is_inside_tree() or is_queued_for_deletion():
+	if (result == Result.RUNNING and not manual_pause_active) or _restarting or not is_inside_tree() or is_queued_for_deletion():
 		return false
 	_restarting = true
-	selection.cancel_attack_move_targeting()
+	_clear_uncommitted_input()
 	if is_instance_valid(control_groups):
 		control_groups.clear_groups()
-	return get_tree().change_scene_to_file(restart_scene) == OK
+	var tree := get_tree()
+	var error := tree.change_scene_to_file(restart_scene)
+	if error != OK:
+		_restarting = false
+		return false
+	# change_scene removes the old scene immediately; its _exit_tree also clears
+	# the pause. New scene instantiation happens at frame end, with fresh input.
+	tree.paused = false
+	return true
 
 
 func _update_objective() -> void:

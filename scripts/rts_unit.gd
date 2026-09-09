@@ -302,6 +302,8 @@ func facing_error(point: Vector3) -> float:
 
 
 func _physics_process(delta: float) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return
 	if navigation_suspended:
 		if moving:
 			command_elapsed += delta
@@ -354,6 +356,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_avoidance_velocity(safe_velocity: Vector3) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return # NavigationServer signals can arrive after this frame's pause input.
 	if not navigation_suspended and crowd_enabled and agent.avoidance_enabled and moving and _submitted_order == order_version:
 		_move_on_navigation(safe_velocity.limit_length(movement_speed), get_physics_process_delta_time())
 

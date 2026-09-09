@@ -9,6 +9,7 @@ var range_indicator: MeshInstance3D
 var clearance_indicator: MeshInstance3D
 var conflict_indicator: MeshInstance3D
 var blocking_regions: Array[Dictionary] = []
+var boundary_conflict: Dictionary = {}
 var status: Label
 var reason: String = ""
 var point := Vector3.ZERO
@@ -84,6 +85,7 @@ func begin(source: Variant, choice: ConstructionDefinition = null) -> bool:
 	active = true
 	valid = false
 	blocking_regions.clear()
+	boundary_conflict.clear()
 	_pending.clear()
 	field.selection.cancel_gesture()
 	field.selection._pending_picks.clear()
@@ -100,6 +102,7 @@ func cancel() -> void:
 	active = false
 	valid = false
 	blocking_regions.clear()
+	boundary_conflict.clear()
 	_pending.clear()
 	if is_instance_valid(field) and is_instance_valid(field.selection):
 		field.selection.placement_active = false
@@ -118,7 +121,7 @@ func cancel() -> void:
 
 func _input(event: InputEvent) -> void:
 	# Preview cancellation owns right-click before pointer-only HUD surfaces
-	# (including the minimap) can consume it. Escape still gives Help first refusal.
+	# (including the minimap) can consume it. Active matches give Escape to Pause.
 	if active and field.builder_construction_enabled and event is InputEventMouseButton and event.is_action_pressed("placement_cancel"):
 		cancel()
 		get_viewport().set_input_as_handled()
@@ -130,6 +133,8 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not active:
 		return
+	if field is BaseAssaultField and event is InputEventKey and event.physical_keycode == KEY_ESCAPE:
+		return # The match pause menu owns this key, including preview cancellation.
 	if event is InputEventKey and event.pressed and not event.echo and not event.ctrl_pressed and not event.alt_pressed and not event.meta_pressed and event.physical_keycode == KEY_R and definition.is_barrier():
 		rotate_orientation()
 		get_viewport().set_input_as_handled()
@@ -154,7 +159,7 @@ func _physics_process(delta: float) -> void:
 	for screen in requests:
 		var hit := _ground(screen)
 		if hit.is_empty():
-			reason = "Point at flat ground inside the green boundary"
+			reason = "Point at supported flat terrain"
 			continue
 		var manager := field.construction
 		var result := manager.place(_owner, source, definition, hit["position"], orientation_degrees)
@@ -193,10 +198,14 @@ func _physics_process(delta: float) -> void:
 		_cooldown = 0.1
 		_checked_point = point
 		_checked_orientation = orientation_degrees
-		reason = field.construction.validate(_owner, source, definition, point, orientation_degrees) if not hit.is_empty() else "Point at flat ground inside the green boundary"
+		reason = field.construction.validate(_owner, source, definition, point, orientation_degrees) if not hit.is_empty() else "Point at supported flat terrain"
 		valid = reason.is_empty()
 		blocking_regions.clear()
+		boundary_conflict.clear()
 		if not hit.is_empty():
+			var boundary := field.placement_boundary_conflict(point, definition, orientation_degrees)
+			if not boundary.is_empty() and reason == field._boundary_reason(boundary.kind):
+				boundary_conflict = boundary
 			var overlaps := field.overlapping_protected_regions(point, definition, orientation_degrees)
 			# Do not blame an access region when another authoritative check rejected
 			# first (funds, boundary, occupied geometry, or unavailable builder).
@@ -207,7 +216,7 @@ func _physics_process(delta: float) -> void:
 		var explanation := reason
 		if not blocking_regions.is_empty() and blocking_regions.all(func(region: Dictionary) -> bool: return region["clearance_only"]):
 			explanation += " · clearance overlap"
-		status.text = ("Valid · %d credits · left click to build" % definition.credit_cost if valid else "Cannot build · " + explanation) + "\nOuter outline · clearance. Right click / Escape · Cancel"
+		status.text = ("Valid · %d credits · left click to build" % definition.credit_cost if valid else "Cannot build · " + explanation) + "\n" + _controls_hint()
 		if definition.is_barrier():
 			status.text += "\n%s · %d° · R rotate · 1-unit grid" % [definition.display_name(), orientation_degrees]
 	elif not point.is_equal_approx(_checked_point) or orientation_degrees != _checked_orientation:
@@ -215,12 +224,18 @@ func _physics_process(delta: float) -> void:
 		# Builder access queries retain their existing 10 Hz cadence.
 		valid = false
 		blocking_regions.clear()
+		boundary_conflict.clear()
 		reason = "Checking placement"
 		_material.albedo_color = Color(0.75, 0.85, 0.85, 0.35)
 		_refresh_feedback_geometry(not hit.is_empty(), true)
-		status.text = "Checking placement…\nOuter outline · clearance. Right click / Escape · Cancel"
+		status.text = "Checking placement…\n" + _controls_hint()
 	clearance_indicator.visible = preview.visible
-	conflict_indicator.visible = preview.visible and not blocking_regions.is_empty()
+	conflict_indicator.visible = preview.visible and (not blocking_regions.is_empty() or not boundary_conflict.is_empty())
+
+
+func _controls_hint() -> String:
+	var boundary := "Green · supported map limit. " if field.builder_construction_enabled else "Green · construction boundary. "
+	return boundary + "Outline · clearance.\nRight click · Cancel. " + ("Esc · Pause" if field is BaseAssaultField else "Esc · Cancel")
 
 
 func _guide_node(identity: String) -> MeshInstance3D:
@@ -266,11 +281,18 @@ func _refresh_feedback_geometry(has_ground: bool, checking: bool = false) -> voi
 	_guide_outline(mesh, rectangle.grow(field.CLEARANCE), color)
 	mesh.surface_end()
 	clearance_indicator.mesh = mesh
-	if blocking_regions.is_empty():
+	if blocking_regions.is_empty() and boundary_conflict.is_empty():
 		conflict_indicator.mesh = null
 		return
 	mesh = ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	if not boundary_conflict.is_empty():
+		# The brighter red segments are only the unsupported parts of the exact
+		# footprint/clearance, exit or delivery-access perimeter that was rejected.
+		for edge in boundary_conflict.edges:
+			var start: Vector2 = edge["from"]
+			var end: Vector2 = edge["to"]
+			_guide_fill(mesh, Rect2(start.min(end), (end - start).abs()).grow(0.09), Color(1, 0.08, 0.03, 1), 0.1)
 	for region in blocking_regions:
 		_guide_fill(mesh, region["rectangle"], Color(1, 0.5, 0.2, 0.22), 0.035)
 		_guide_outline(mesh, region["rectangle"], Color(1, 0.5, 0.2, 1))

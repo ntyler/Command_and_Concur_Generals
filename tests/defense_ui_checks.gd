@@ -22,6 +22,7 @@ func _run() -> void:
 
 
 func _defense_ui_layouts(label: String) -> void:
+	var retain_preview := defended.placement.active
 	for dimensions in [Vector2i(1280, 720), Vector2i(1920, 1080)]:
 		await _hud_layout(dimensions)
 		await _defense_capture("%s_%dx%d" % [label, dimensions.x, dimensions.y])
@@ -29,8 +30,14 @@ func _defense_ui_layouts(label: String) -> void:
 		_check(defended.help_panel.is_open(), "normal defense viewport F1 opens expanded Help")
 		await _hud_layout(dimensions)
 		await _defense_capture("%s_help_%dx%d" % [label, dimensions.x, dimensions.y])
-		await _hud_key(KEY_ESCAPE)
-		_check(not defended.help_panel.is_open(), "Escape closes defense Help while retaining selection")
+		if retain_preview:
+			await _hud_key(KEY_F1)
+			_check(not defended.help_panel.is_open() and defended.placement.active and not defended.manual_pause_active, "F1 closes defense Help and retains the free preview during layout inspection")
+		else:
+			await _hud_key(KEY_ESCAPE)
+			_check(not defended.help_panel.is_open() and defended.manual_pause_active, "Escape closes defense Help and pauses while retaining selection")
+			await _hud_key(KEY_ESCAPE)
+			_check(not defended.manual_pause_active, "Escape resumes the defense match")
 	root.size = Vector2i(1280, 720)
 	await _frames(5)
 

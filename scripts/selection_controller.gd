@@ -29,6 +29,9 @@ var placement_active: bool = false:
 		placement_active = value
 		if value and attack_move_targeting:
 			cancel_attack_move_targeting()
+		if value and is_instance_valid(tempest_targeting) and tempest_targeting.active:
+			tempest_targeting.cancel()
+var tempest_targeting: TempestTargeting
 var attack_move_targeting: bool = false
 var attack_move_feedback: String = ""
 var _targeting_revision: int = 0
@@ -42,6 +45,8 @@ func _ready() -> void:
 
 
 func _attack_move_available() -> bool:
+	if is_instance_valid(tempest_targeting) and tempest_targeting.active:
+		return false
 	return attack_move_enabled and _focused and is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(gameplay_field) and gameplay_field.is_inside_tree() and not gameplay_field.is_queued_for_deletion() and gameplay_field.gameplay_enabled and not placement_active
 
 
@@ -112,10 +117,10 @@ func _dispatch_attack_move(destination: Vector3, revision: int) -> void:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_echo():
+	if not _gameplay_input_enabled() or event.is_echo():
 		return
-	# GUI and Help get first refusal, including focused text controls and Escape.
-	if attack_move_targeting and event.is_action_pressed("cancel_selection"):
+	# Match Escape belongs to RTSPauseMenu; legacy fields retain cancellation.
+	if not gameplay_field is BaseAssaultField and attack_move_targeting and event.is_action_pressed("cancel_selection"):
 		cancel_attack_move_targeting()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("attack_move"):
@@ -172,6 +177,8 @@ func replace_units(candidates: Array) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if not _gameplay_input_enabled():
+		return
 	# Cancellation owns right-click even over the minimap or another UI surface.
 	# It cannot fall through to ordinary Move or explicit Attack.
 	if attack_move_targeting and event.is_action_pressed("command_move"):
@@ -179,7 +186,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	# _input observes cancellation even when GUI consumes the eventual release.
-	if event.is_action_pressed("cancel_selection"):
+	if not gameplay_field is BaseAssaultField and event.is_action_pressed("cancel_selection"):
 		cancel_gesture()
 		_pending_picks.clear()
 	if not _pressed:
@@ -195,6 +202,10 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not _gameplay_input_enabled():
+		return
+	if is_instance_valid(tempest_targeting) and tempest_targeting.active:
+		return
 	# GUI gets first refusal. Pointer hover filters mouse commands, not an
 	# otherwise unhandled keyboard Stop (a focused control can still consume it).
 	if event.is_action_pressed("unit_stop") and not event.is_echo():
@@ -237,6 +248,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if not _gameplay_input_enabled():
+		return
 	_prune_selection()
 	if not is_instance_valid(self):
 		return
@@ -344,6 +357,10 @@ func cancel_gesture() -> void:
 		selection_box.hide()
 	if is_instance_valid(camera_rig):
 		camera_rig.gesture_active = false
+
+
+func _gameplay_input_enabled() -> bool:
+	return is_instance_valid(gameplay_field) and gameplay_field.gameplay_enabled and is_inside_tree() and not is_queued_for_deletion()
 
 
 func _update_rectangle() -> void:

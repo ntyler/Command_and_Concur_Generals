@@ -1,6 +1,6 @@
 class_name RTSHelpPanel
 extends PanelContainer
-## Local pointer surface; Escape is captured before the world's gesture observer.
+## Local pointer surface. Match Escape is owned by RTSPauseMenu.
 
 var field: BaseAssaultField
 var help_button: Button
@@ -37,6 +37,7 @@ func _ready() -> void:
 	help_content.add_theme_constant_override("separation", 6)
 	column.add_child(help_content)
 	var scenario := "FIELDWORK / BULLDOZER ASSAULT" if field.builder_construction_enabled else ("FIELDWORK / SUPPLY DEPOT ASSAULT" if field.supply_depot_definition != null else "FIELDWORK / COMBINED ARMS")
+	var tempest_definition: ConstructionDefinition = field.get("tempest_definition") as ConstructionDefinition
 	if field.power_enabled:
 		scenario = "FIELDWORK / POWER ASSAULT"
 	if field.defense_definition != null:
@@ -48,7 +49,7 @@ func _ready() -> void:
 	_label(help_content, scenario, Color("a7ecdf"))
 	_label(help_content, "WASD / arrows / edges · Pan    Wheel · Zoom\nClick / drag · Select units    Shift · Toggle / add\nClick owned building · Select building\nRight-click ground · Move    X · Stop\nRight-click hostile · Attack with combat units")
 	if field.attack_move_enabled:
-		_label(help_content, "Q / Attack Move · Then click ground or minimap\nEngage enemies along the route, then resume travel\nOrdinary Move only travels · Right-click / Esc cancels targeting")
+		_label(help_content, "Q / Attack Move · Then click ground or minimap\nEngage enemies along the route, then resume travel\nOrdinary Move only travels · Right-click cancels targeting")
 	var dropoff_hint := "owned HQ / depot" if field.supply_depot_definition != null else "owned HQ"
 	var build_hint := "HQ · Build Barracks / Factory / Supply Depot" if field.supply_depot_definition != null else "HQ · Build Barracks or Vehicle Factory"
 	var harvest_hint := "Collectors + right-click supply · Harvest\nLoaded collectors + right-click %s · Deposit" % dropoff_hint
@@ -63,8 +64,10 @@ func _ready() -> void:
 		build_hint = "HQ · Bulldozers    Depot · Collectors    Airfield · Helicopters\nBulldozer · Build economy / production / power / ground or air defense\nRight-click unfinished site · Resume    X / Move · Pause"
 	if field.wall_definition != null:
 		build_hint = "Bulldozer · Build economy / army / air / Wall / Gate\nBarrier placement · R rotate 0°/90° · 1-unit grid · Align ends\nOwned gate · Open / Close manually · Clear doorway to close"
-	_label(help_content, "%s\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access" % [harvest_hint, build_hint])
-	_label(help_content, "Minimap · Left-click to center; right-click to Move\nCtrl + 1–9 · Assign group    1–9 · Recall\nDouble-tap same number · Recall and center\nEsc · Close Help / cancel drag    F3 · Diagnostics")
+	if tempest_definition != null:
+		build_hint = "Bulldozer · Economy / army / air / Wall / Gate / Tempest\nTempest · 5000 credits · Requires Factory or Airfield\nBarrier placement · R rotate · Owned gate · Open / Close"
+	_label(help_content, "%s\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click to cancel\nGreen · Construction limit    Gold · Protected access" % [harvest_hint, build_hint])
+	_label(help_content, "Minimap · Left-click to center; right-click to Move\nCtrl + 1–9 · Assign group    1–9 · Recall\nDouble-tap same number · Recall and center\nEsc · Pause / resume; cancels previews · F3 · Diagnostics")
 	# The builder variant keeps the same 22-line total as the validated 720p Help.
 	# Its extra work instructions share the economy/goal space, above the objective.
 	var objective_hint := "Destroy enemy HQ · Protect your HQ\nHarvest → build production → train → attack\nMint · Your team    Coral · Enemy    Walls block fire"
@@ -81,6 +84,8 @@ func _ready() -> void:
 		objective_hint = "Airfield / AA need 3 power · Low power: training 50%, defenses off\nHelicopters attack ground only · AA attacks air only · No landing"
 	if field.wall_definition != null:
 		objective_hint = "Gates: O open / C closed / ~ updating · Both teams can pass open gates\nWalls need no power · Enemy ground waves can breach a blocking barrier"
+	if tempest_definition != null:
+		objective_hint = "Tempest · 8 power · 180s powered charge · Launch then ground / minimap\n6s warning · Radius 10 · 1000 ground-only damage · FRIENDLY FIRE"
 	_label(help_content, objective_hint, Color("ffce78"))
 	set_open(false)
 
@@ -109,17 +114,6 @@ func set_open(opened: bool) -> void:
 	# Containers otherwise retain their expanded size and catch unseen clicks.
 	size = Vector2.ZERO
 	reset_size.call_deferred()
-
-
-func _input(event: InputEvent) -> void:
-	if not field.gameplay_enabled or not is_open():
-		return
-	var focus := get_viewport().gui_get_focus_owner()
-	if focus != null and not is_ancestor_of(focus):
-		return
-	if event.is_action_pressed("cancel_selection") and not event.is_echo():
-		set_open(false)
-		get_viewport().set_input_as_handled()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

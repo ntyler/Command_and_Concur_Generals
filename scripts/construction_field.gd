@@ -1,8 +1,9 @@
 class_name ConstructionField
 extends HarvestField
-## Small flat-field construction. Geometry comes only from committed rectangles.
+## Flat-field construction. Geometry comes only from committed rectangles.
 
 const BUILD_AREA := Rect2(-27, -21, 54, 43)
+const MAP_EDGE_REASON := "Too close to map edge—move the building inward"
 const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -13.3, 3, 9), Rect2(-27, 10, 25, 2)]
 @export var construction_definition: ConstructionDefinition = load("res://construction/barracks.tres")
 @export var vehicle_factory_definition: ConstructionDefinition
@@ -262,6 +263,66 @@ func construction_point(point: Vector3, definition: ConstructionDefinition) -> V
 	return Vector3(snappedf(point.x, 1.0), point.y, snappedf(point.z, 1.0)) if definition != null and definition.is_barrier() else point
 
 
+func construction_area() -> Rect2:
+	# The physical terrain owns the outer limit, with the existing 0.85-unit
+	# supported-edge inset. Camera panning is independent. Only the original
+	# HQ-driven prototype retains its smaller authored local construction area.
+	var supported := field_bounds.grow(-CLEARANCE)
+	return supported if builder_construction_enabled else BUILD_AREA.intersection(supported)
+
+
+func _outside_edges(rectangle: Rect2, bounds: Rect2) -> Array[Dictionary]:
+	var edges: Array[Dictionary] = []
+	# Clip each proposed perimeter segment to the parts outside the allowed area.
+	# A partly crossing edge must not highlight its still-supported portion.
+	for x in [rectangle.position.x, rectangle.end.x]:
+		if x < bounds.position.x or x > bounds.end.x:
+			edges.append({"from": Vector2(x, rectangle.position.y), "to": Vector2(x, rectangle.end.y)})
+		else:
+			if rectangle.position.y < bounds.position.y:
+				edges.append({"from": Vector2(x, rectangle.position.y), "to": Vector2(x, minf(rectangle.end.y, bounds.position.y))})
+			if rectangle.end.y > bounds.end.y:
+				edges.append({"from": Vector2(x, maxf(rectangle.position.y, bounds.end.y)), "to": Vector2(x, rectangle.end.y)})
+	for z in [rectangle.position.y, rectangle.end.y]:
+		if z < bounds.position.y or z > bounds.end.y:
+			edges.append({"from": Vector2(rectangle.position.x, z), "to": Vector2(rectangle.end.x, z)})
+		else:
+			if rectangle.position.x < bounds.position.x:
+				edges.append({"from": Vector2(rectangle.position.x, z), "to": Vector2(minf(rectangle.end.x, bounds.position.x), z)})
+			if rectangle.end.x > bounds.end.x:
+				edges.append({"from": Vector2(maxf(rectangle.position.x, bounds.end.x), z), "to": Vector2(rectangle.end.x, z)})
+	return edges
+
+
+func placement_boundary_conflict(point: Vector3, definition: ConstructionDefinition, orientation: int = 0) -> Dictionary:
+	if definition == null or not point.is_finite():
+		return {}
+	point = construction_point(point, definition)
+	var footprint := definition.oriented_footprint(orientation)
+	var rectangle := Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
+	var bounds := construction_area()
+	var shapes: Array[Dictionary] = [{"kind": "footprint clearance", "rectangle": rectangle.grow(CLEARANCE)}]
+	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY, RTSBuilding.Kind.WALL, RTSBuilding.Kind.GATE]:
+		shapes.append({"kind": "production exit", "rectangle": exit_area(rectangle)})
+	if definition.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
+		for access in depot_access_areas(rectangle):
+			shapes.append({"kind": "delivery access", "rectangle": access})
+	for shape in shapes:
+		if not bounds.encloses(shape.rectangle):
+			shape["bounds"] = bounds
+			shape["footprint"] = rectangle
+			shape["clearance"] = rectangle.grow(CLEARANCE)
+			shape["edges"] = _outside_edges(shape.rectangle, bounds)
+			return shape
+	return {}
+
+
+func _boundary_reason(kind: String = "footprint clearance") -> String:
+	if builder_construction_enabled:
+		return MAP_EDGE_REASON if kind == "footprint clearance" else MAP_EDGE_REASON + " · " + kind
+	return "Move inward from the green construction boundary · " + kind
+
+
 func _barrier_end_connection(rectangle: Rect2, neighbor: Rect2) -> bool:
 	# Permit exact collinear end contact only. The entire gate span is reserved,
 	# even while open, so no wall can be committed into its doorway.
@@ -281,8 +342,9 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition, orie
 	var footprint := definition.oriented_footprint(orientation)
 	var rectangle := Rect2(Vector2(point.x, point.z) - footprint / 2.0, footprint)
 	var clear := rectangle.grow(CLEARANCE)
-	if not BUILD_AREA.encloses(clear) or not field_bounds.grow(-CLEARANCE).encloses(clear):
-		return "Full footprint and clearance must fit inside the green boundary"
+	var bounds := construction_area()
+	if not bounds.encloses(clear):
+		return _boundary_reason()
 	var barrier_geometry: Array[Rect2] = []
 	var connected_bodies: Array[RID] = []
 	for building in registered_buildings():
@@ -305,8 +367,8 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition, orie
 	# Fixed generators and defenses have no production exit.
 	if definition.kind not in [RTSBuilding.Kind.POWER_PLANT, RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIRFIELD, RTSBuilding.Kind.AIR_DEFENSE_BATTERY, RTSBuilding.Kind.WALL, RTSBuilding.Kind.GATE]:
 		var exit_rectangle := exit_area(rectangle)
-		if not BUILD_AREA.encloses(exit_rectangle):
-			return "%s exit must fit inside the construction area" % definition.display_name()
+		if not bounds.encloses(exit_rectangle):
+			return _boundary_reason("production exit")
 		for occupied in obstacles:
 			if exit_rectangle.intersects(occupied.grow(CLEARANCE), true):
 				return "%s exit would be obstructed" % definition.display_name()
@@ -314,8 +376,8 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition, orie
 		# The same layout drives delivery, placement and future protected access.
 		# Existing units can leave a bay normally; fixed geometry cannot cover it.
 		for access in depot_access_areas(rectangle):
-			if not BUILD_AREA.encloses(access):
-				return "Supply Depot delivery access must fit inside the construction area"
+			if not bounds.encloses(access):
+				return _boundary_reason("delivery access")
 			for occupied in obstacles:
 				if access.intersects(occupied.grow(CLEARANCE), true):
 					return "Supply Depot delivery access would be obstructed"
@@ -359,7 +421,7 @@ func _refresh_placement_guides(_site_id: int = 0) -> void:
 	# changes. A single persistent node makes repeated F3 toggles allocation-free.
 	var mesh := ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
-	_outline(mesh, BUILD_AREA, Color("7eb9a0"))
+	_outline(mesh, construction_area(), Color("7eb9a0"))
 	# Ordinary placement highlights its actual conflicts in BuildingPlacement.
 	# The complete reservation map remains available only in F3 diagnostics.
 	if movement_debug:

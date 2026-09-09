@@ -41,7 +41,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if pointer_over_interface() or not _focused:
+	if not _commands_enabled() or pointer_over_interface() or not _focused:
 		return
 	if event.is_action_pressed("camera_zoom_in"):
 		target_zoom = clampf(target_zoom - zoom_speed, minimum_zoom, maximum_zoom)
@@ -52,7 +52,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	if not _focused or keyboard_blocked_by_interface():
+	if not _commands_enabled() or not _focused or keyboard_blocked_by_interface():
 		pan_velocity = Vector2.ZERO
 		return
 	var keyboard := Input.get_vector("camera_left", "camera_right", "camera_forward", "camera_back")
@@ -64,7 +64,7 @@ func _process(delta: float) -> void:
 
 
 func center_on_ground(point: Vector3) -> void:
-	if not point.is_finite():
+	if not _commands_enabled() or not point.is_finite():
 		return
 	position.x = clampf(point.x, map_bounds.position.x, map_bounds.end.x)
 	position.z = clampf(point.z, map_bounds.position.y, map_bounds.end.y)
@@ -83,6 +83,8 @@ func keyboard_blocked_by_interface() -> bool:
 
 
 func advance(delta: float, desired_velocity: Vector2) -> void:
+	if not _commands_enabled():
+		return
 	# Exact integration of exponential velocity smoothing is independent of FPS.
 	var weight := 1.0 - exp(-smoothing * delta)
 	var displacement := desired_velocity * delta + (pan_velocity - desired_velocity) * weight / smoothing
@@ -91,6 +93,20 @@ func advance(delta: float, desired_velocity: Vector2) -> void:
 	position.z = clampf(position.z + displacement.y, map_bounds.position.y, map_bounds.end.y)
 	zoom = lerpf(zoom, target_zoom, weight)
 	_apply_zoom()
+
+
+func _commands_enabled() -> bool:
+	if not is_inside_tree() or get_tree().paused:
+		return false
+	var field := get_parent() as TestField
+	return field == null or field.gameplay_enabled
+
+
+func cancel_pending_input() -> void:
+	pan_velocity = Vector2.ZERO
+	target_zoom = zoom
+	gesture_active = false
+	_pointer_inside = false
 
 
 func edge_direction(pointer: Vector2, viewport_rect: Rect2) -> Vector2:

@@ -36,7 +36,9 @@ func _air_layouts(label: String) -> void:
 		await _hud_layout(dimensions)
 		await _air_capture("%s_help_%dx%d" % [label, dimensions.x, dimensions.y])
 		await _hud_key(KEY_ESCAPE)
-		_check(not air.help_panel.is_open(), "Escape closes Help without world command")
+		_check(not air.help_panel.is_open() and air.manual_pause_active, "Escape closes Help and pauses without a world command")
+		await _hud_key(KEY_ESCAPE)
+		_check(not air.manual_pause_active, "Escape resumes the air match")
 	root.size = Vector2i(1280, 720)
 	await _frames(4)
 

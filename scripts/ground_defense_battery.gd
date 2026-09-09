@@ -207,6 +207,8 @@ func facing_error(point: Vector3) -> float:
 
 
 func _physics_process(delta: float) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return # Preserve acquired target as well as scan/cooldown progress.
 	activate_defense()
 	if not _base_available():
 		_clear_target()

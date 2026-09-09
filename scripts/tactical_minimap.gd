@@ -79,11 +79,27 @@ func _interactive() -> bool:
 	return is_instance_valid(field) and field.is_inside_tree() and not field.is_queued_for_deletion() and field.gameplay_enabled and not field.selection.placement_active
 
 
+func cancel_pending_input() -> void:
+	_pending_moves.clear()
+
+
 func _gui_input(event: InputEvent) -> void:
 	if not event is InputEventMouse:
 		return
 	accept_event()
 	if not event is InputEventMouseButton or not event.pressed or not _interactive():
+		return
+	var tempest := field.selection.tempest_targeting
+	if is_instance_valid(tempest) and tempest.active:
+		field.selection.cancel_gesture()
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			tempest.cancel()
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			var target: Variant = mapping.content_to_world(event.position)
+			if target == null:
+				tempest.reject_target()
+			else:
+				tempest.queue_target(target)
 		return
 	if field.selection.attack_move_targeting and event.button_index == MOUSE_BUTTON_RIGHT:
 		field.selection.cancel_attack_move_targeting()
@@ -146,7 +162,7 @@ func refresh_markers() -> void:
 		for building in (field as ProductionField).registered_buildings():
 			var rectangle := Rect2(Vector2(building.global_position.x, building.global_position.z) - building.footprint / 2.0, building.footprint)
 			terrain.erase(rectangle)
-			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant", "ground_defense_battery", "airfield", "air_defense_battery", "wall", "gate_closed"][building.kind]
+			var kind: String = ["headquarters", "barracks", "vehicle_factory", "supply_depot", "power_plant", "ground_defense_battery", "airfield", "air_defense_battery", "wall", "gate_closed", "tempest_array"][building.kind]
 			if building is BarrierBuilding:
 				for part in (building as BarrierBuilding).navigation_footprints():
 					terrain.erase(part)
@@ -164,6 +180,11 @@ func refresh_markers() -> void:
 			markers.append({"identity": cache.get_instance_id(), "kind": "supply", "position": cache.global_position, "owner": 0, "selected": false, "depleted": cache.depleted, "rectangle": rectangle})
 			_watch(cache.changed)
 			_watch(cache.tree_exiting)
+	if is_instance_valid(field.selection.tempest_targeting):
+		var strikes := field.get("tempest_strikes") as TempestStrikes
+		if is_instance_valid(strikes):
+			for warning in strikes.warning_markers():
+				markers.append({"identity": warning.strike_id, "kind": "tempest_strike", "position": warning.target, "owner": warning.owner_id, "radius": warning.radius, "remaining": warning.remaining})
 	if terrain != _static_world or mapping.content_rect != _static_content or mapping.bounds != _static_bounds:
 		_static_world.assign(terrain)
 		_static_content = mapping.content_rect
@@ -228,6 +249,12 @@ func _draw() -> void:
 				draw_circle(point, 2.8, color)
 			if marker.selected:
 				draw_arc(point, 5.0, 0, TAU, 16, Color.WHITE, 1.5, true)
+		elif marker.kind == "tempest_strike":
+			var radius := point.distance_to(mapping.world_to_content(marker.position + Vector3(marker.radius, 0, 0)))
+			draw_arc(point, radius, 0, TAU, 48, Color("ffce78"), 2.0, true)
+			draw_line(point - Vector2(5, 0), point + Vector2(5, 0), Color("ffce78"), 2)
+			draw_line(point - Vector2(0, 5), point + Vector2(0, 5), Color("ffce78"), 2)
+			draw_string(font, point + Vector2(6, -4), "%ds" % ceili(marker.remaining), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("ffce78"))
 		elif marker.kind == "supply":
 			var diamond := PackedVector2Array([point + Vector2(0, -5), point + Vector2(5, 0), point + Vector2(0, 5), point + Vector2(-5, 0), point + Vector2(0, -5)])
 			if not marker.depleted:
@@ -241,7 +268,7 @@ func _draw() -> void:
 			draw_rect(rectangle, color, false, 1.2)
 			if marker.kind == "ground_defense_battery":
 				draw_arc(point, 6.0, 0, TAU, 16, color, 1.2, true)
-			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "ground_defense_battery": "G", "airfield": "F", "air_defense_battery": "A", "wall": "W", "gate_open": "O", "gate_closed": "C", "gate_pending": "~", "site": "+"}[marker.kind]
+			var glyph: String = {"headquarters": "H", "barracks": "B", "vehicle_factory": "V", "supply_depot": "D", "power_plant": "P", "ground_defense_battery": "G", "airfield": "F", "air_defense_battery": "A", "wall": "W", "gate_open": "O", "gate_closed": "C", "gate_pending": "~", "tempest_array": "T", "site": "+"}[marker.kind]
 			draw_string(font, point + Vector2(-4, 4), glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
 	if footprint.size() >= 3:
 		var outline := footprint.duplicate()

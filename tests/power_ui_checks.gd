@@ -29,7 +29,9 @@ func _power_ui_layouts(label: String) -> void:
 		await _hud_layout(dimensions)
 		await _power_capture("%s_help_%dx%d" % [label, dimensions.x, dimensions.y])
 		await _hud_key(KEY_ESCAPE)
-		_check(not powered.help_panel.is_open(), "Escape closes powered Help without losing context")
+		_check(not powered.help_panel.is_open() and powered.manual_pause_active, "Escape closes powered Help and pauses without losing context")
+		await _hud_key(KEY_ESCAPE)
+		_check(not powered.manual_pause_active, "Escape resumes the powered match")
 	root.size = Vector2i(1280, 720)
 	await _frames(5)
 
@@ -102,9 +104,9 @@ func _power_ui_play() -> void:
 	_check(powered.placement.active and powered.placement.valid and powered.power_snapshot(1).generated == 0, "Power Plant preview is valid while short of power and grants no generation")
 	await _hud_key(KEY_F1)
 	await _hud_key(KEY_ESCAPE)
-	_check(not powered.help_panel.is_open() and powered.placement.active, "Help Escape leaves the Power Plant preview active")
+	_check(not powered.help_panel.is_open() and not powered.placement.active and powered.manual_pause_active, "Help Escape cancels the free Power Plant preview and opens Pause")
 	await _hud_key(KEY_ESCAPE)
-	_check(not powered.placement.active and powered.construction.unfinished_id == 0, "second Escape cancels the free Power Plant preview")
+	_check(not powered.placement.active and not powered.manual_pause_active and powered.construction.unfinished_id == 0, "second Escape resumes with no cancelled Power Plant site")
 	var plant_site := await _power_ui_place(panel.power_plant_button, POWER_PLANT, DEPOT_POINT)
 	if plant_site == null: return
 	await _hud_pick_unit(actor)

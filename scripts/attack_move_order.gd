@@ -119,6 +119,8 @@ func ignored_target_count() -> int:
 
 
 func _physics_process(delta: float) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return
 	if not active:
 		return # No idle acquisition or timer work.
 	if not _source_available():

@@ -20,6 +20,7 @@ var _desired: Array[Rect2] = []
 var _submitted: Array[Rect2] = []
 var _previous: Array[Rect2] = []
 var _active_generation: int = 0
+var _resume_generation: int = 0
 var _mesh: NavigationMesh
 var _map: RID
 var _region: RID
@@ -56,7 +57,14 @@ func request(rectangles: Array[Rect2]) -> int:
 
 
 func advance(delta: float) -> void:
-	if not busy or field() == null:
+	if field() == null:
+		return
+	if field().manual_pause_active:
+		return # Keep pending topology; result/deletion cleanup remains valid.
+	if _resume_generation != 0:
+		_finish_ready()
+		return
+	if not busy:
 		return
 	if _active_generation == 0:
 		_submit()
@@ -67,8 +75,6 @@ func advance(delta: float) -> void:
 		last_prepare_seconds = _elapsed
 		last_prepare_usec = Time.get_ticks_usec() - _started_usec
 		var finished := _active_generation
-		_active_generation = 0
-		_mesh = null
 		if finished != generation:
 			_submit()
 			return
@@ -77,17 +83,36 @@ func advance(delta: float) -> void:
 		synchronized.emit(finished)
 		if field() == null or finished != generation:
 			return
-		busy = false
-		blocked = false
-		for unit in field().units.duplicate():
-			if field() == null or busy:
-				return
-			if is_instance_valid(unit) and field().contains_unit(unit):
-				unit.resume_navigation()
-		if field() != null and generation == finished and not busy:
-			ready.emit(finished)
+		if field().manual_pause_active:
+			return # Retry the synchronized notification after resume; retain its mesh.
+		_active_generation = 0
+		_mesh = null
+		_resume_generation = finished
+		_finish_ready()
 	elif _elapsed >= field().navigation_timeout:
 		_fail("Navigation synchronization timed out; cancel site to restore terrain")
+
+
+func _finish_ready() -> void:
+	var finished := _resume_generation
+	if field() == null or field().manual_pause_active:
+		return
+	if finished != generation:
+		_resume_generation = 0
+		return
+	busy = false
+	blocked = false
+	for unit in field().units.duplicate():
+		if field() == null or field().manual_pause_active:
+			return # Already resumed actors are idempotent; remaining actors wait.
+		if busy or finished != generation:
+			_resume_generation = 0
+			return
+		if is_instance_valid(unit) and field().contains_unit(unit):
+			unit.resume_navigation()
+	_resume_generation = 0
+	if field() != null and generation == finished and not busy:
+		ready.emit(finished)
 
 
 func _submit() -> void:
@@ -161,6 +186,7 @@ func close() -> void:
 	generation += 1
 	busy = false
 	_active_generation = 0
+	_resume_generation = 0
 	_mesh = null
 	_desired.clear()
 	_submitted.clear()

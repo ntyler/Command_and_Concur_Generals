@@ -22,7 +22,13 @@ const STRESS_OBSTACLES: Array[Rect2] = [
 var field_bounds: Rect2 = MAP_BOUNDS
 var obstacles: Array[Rect2] = OBSTACLES.duplicate()
 
-var gameplay_enabled: bool = true # Scene-local match gate; legacy fields stay enabled.
+var manual_pause_active: bool = false
+var _match_gameplay_enabled: bool = true
+var gameplay_enabled: bool: # Manual pause never overwrites the terminal match gate.
+	get:
+		return _match_gameplay_enabled and not manual_pause_active
+	set(value):
+		_match_gameplay_enabled = value
 var units: Array[RTSUnit] = []
 var _registered: Dictionary[int, RTSUnit] = {}
 var camera_rig: RTSCamera

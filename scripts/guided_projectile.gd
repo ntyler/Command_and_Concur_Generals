@@ -59,6 +59,8 @@ func target_actor() -> Node3D:
 
 
 func _physics_process(delta: float) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return # A paused target is still valid; retain the committed projectile.
 	if spent:
 		return
 	var remaining := lifetime - age

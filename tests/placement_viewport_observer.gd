@@ -66,7 +66,8 @@ func _start() -> void:
 		"enemy_first_wave_time": world.enemy_config.first_wave_time,
 		"enemy_wave_interval": world.enemy_config.wave_interval,
 		"enemy_breach_enabled": world.enemy_config.breach_enabled,
-		"build_area": ConstructionField.BUILD_AREA, "clearance": TestField.CLEARANCE,
+		"build_area": world.construction_area(), "physical_map": world.field_bounds,
+		"camera_pan_bounds": world.camera_rig.map_bounds, "clearance": TestField.CLEARANCE,
 		"builder_construction_enabled": world.builder_construction_enabled,
 		"builder": world.initial_builder, "builder_point": world.initial_builder.global_position,
 		"viewport_size": root.size, "camera_point": world.camera_rig.global_position,
@@ -140,6 +141,7 @@ func _preview_data() -> Dictionary:
 	data["footprint"] = rectangle
 	data["clearance_margin"] = TestField.CLEARANCE
 	data["clearance_rectangle"] = clearance
+	data["boundary_conflict"] = placement.boundary_conflict
 	data["overlapping_regions"] = []
 	for region in _regions():
 		var area: Rect2 = region.get("rectangle", region.get("rect", Rect2()))

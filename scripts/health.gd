@@ -21,6 +21,8 @@ func is_alive() -> bool:
 
 
 func apply_damage(amount: float, source: Node = null) -> float:
+	if is_inside_tree() and get_tree().paused:
+		return 0.0 # Signals/direct callbacks cannot apply gameplay damage during Pause.
 	# Invalid/nonpositive damage is a rejected no-op, never healing.
 	if not damage_enabled or not is_alive() or not is_finite(amount) or amount <= 0.0:
 		return 0.0

@@ -137,7 +137,9 @@ func _hud_help() -> void:
 	await _click(_minimap_point(Vector3(-10, 0, 15)), MOUSE_BUTTON_RIGHT)
 	_check(first.moving and battle.last_command_result != batch, "open Help leaves unrelated minimap/world command region interactive")
 	await _hud_key(KEY_ESCAPE)
-	_check(not battle.help_panel.is_open() and battle.selection.selected_units() == [first], "Escape closes owned Help interaction while preserving selection")
+	_check(not battle.help_panel.is_open() and battle.manual_pause_active and battle.selection.selected_units() == [first], "Escape closes Help and pauses while preserving selection")
+	await _hud_key(KEY_ESCAPE)
+	_check(not battle.manual_pause_active, "next Escape resumes the Help pause")
 	await _hud_pick_building(battle.headquarters)
 	var panel := battle.production_panel as ConstructionPanel
 	await _click(panel.build_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
@@ -150,9 +152,9 @@ func _hud_help() -> void:
 	_check(battle.placement.status.visible and root.get_visible_rect().encloses(placement_rect) and not placement_rect.intersects(battle.help_panel.get_global_rect()) and not placement_rect.intersects(panel.get_global_rect()), "placement instructions remain readable beside expanded Help and HQ controls")
 	await _hud_capture("help_placement_1280x720")
 	await _hud_key(KEY_ESCAPE)
-	_check(not battle.help_panel.is_open() and battle.placement.active, "first Escape closes Help without also cancelling unrelated placement")
+	_check(not battle.help_panel.is_open() and not battle.placement.active and battle.manual_pause_active, "one Escape closes Help, cancels the free preview and opens Pause")
 	await _hud_key(KEY_ESCAPE)
-	_check(not battle.placement.active, "second Escape retains ordinary placement cancellation")
+	_check(not battle.placement.active and not battle.manual_pause_active, "second Escape resumes without restoring the cancelled preview")
 	var sink := HUDKeySink.new()
 	sink.focus_mode = Control.FOCUS_ALL
 	sink.position = Vector2(700, 300)
@@ -162,6 +164,8 @@ func _hud_help() -> void:
 	await _hud_key(KEY_F1)
 	await _hud_key(KEY_F3)
 	_check(sink.presses == 2 and not battle.help_panel.is_open() and not battle.movement_debug, "focused GUI consumes F1/F3 without toggling Help/debug")
+	await _hud_key(KEY_ESCAPE)
+	_check(sink.presses == 3 and not battle.manual_pause_active, "focused GUI consumed Escape is preserved by the central pause owner")
 	sink.release_focus()
 	sink.queue_free()
 	await _hud_layout(Vector2i(1920, 1080))
@@ -329,7 +333,9 @@ func _hud_labels() -> void:
 	await _click(panel.build_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	_check(battle.placement.active and battle.placement_guides.visible, "placement shows its real clearance/access outlines when relevant")
 	await _hud_key(KEY_ESCAPE)
-	_check(not battle.placement_guides.visible, "ending placement hides its outlines again")
+	_check(not battle.placement_guides.visible and battle.manual_pause_active, "Escape hides preview outlines and opens Pause")
+	await _hud_key(KEY_ESCAPE)
+	_check(not battle.manual_pause_active, "Escape resumes after diagnostic placement cancellation")
 
 
 func _hud_observer_count(emitter: Object, event: StringName, observer: Object) -> int:

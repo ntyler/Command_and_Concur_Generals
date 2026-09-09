@@ -13,6 +13,10 @@ var gate_button: Button
 var orientation_button: Button
 var gate_action_button: Button
 var gate_state_label: Label
+var tempest_button: Button
+var tempest_status: Label
+var tempest_progress: ProgressBar
+var tempest_launch_button: Button
 var _pending_gate: WeakRef
 var _pending_gate_open: bool = false
 var _pending_gate_owner: int = 0
@@ -68,12 +72,17 @@ func _ready() -> void:
 		column.add_child(button)
 	wall_button.pressed.connect(_begin_barrier.bind(false))
 	gate_button.pressed.connect(_begin_barrier.bind(true))
+	tempest_button = Button.new()
+	tempest_button.focus_mode = Control.FOCUS_NONE
+	tempest_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(tempest_button)
+	tempest_button.pressed.connect(_begin_tempest)
 	if (field as ConstructionField).airfield_definition != null:
 		var choices := GridContainer.new()
 		choices.columns = 2
 		choices.add_theme_constant_override("h_separation", 6)
 		column.add_child(choices)
-		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button, wall_button, gate_button]:
+		for button in [build_button, factory_button, depot_button, power_plant_button, defense_button, airfield_button, air_defense_button, wall_button, gate_button, tempest_button]:
 			button.reparent(choices)
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	orientation_button = Button.new()
@@ -89,6 +98,18 @@ func _ready() -> void:
 	gate_action_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(gate_action_button)
 	gate_action_button.pressed.connect(_gate_action)
+	tempest_status = _label(column, "")
+	tempest_status.add_theme_font_size_override("font_size", 14)
+	tempest_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tempest_progress = ProgressBar.new()
+	tempest_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(tempest_progress)
+	tempest_launch_button = Button.new()
+	tempest_launch_button.text = "Launch Tempest · Choose target"
+	tempest_launch_button.focus_mode = Control.FOCUS_NONE
+	tempest_launch_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(tempest_launch_button)
+	tempest_launch_button.pressed.connect(_launch_tempest)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -170,10 +191,17 @@ func refresh_construction() -> void:
 			button.tooltip_text = "%s · %d HP · no power · one site at a time" % [choice.display_name(), choice.maximum_health]
 			button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, choice).is_empty()
 	_refresh_barrier_controls()
+	var tempest: ConstructionDefinition = world.get("tempest_definition")
+	tempest_button.visible = build_button.visible and world.builder_construction_enabled and tempest != null
+	if tempest != null:
+		var tempest_reason := world.construction.can_begin(field.selection.friendly_owner_id, source, tempest)
+		tempest_button.text = "Tempest Array · %d · %ss" % [tempest.credit_cost, str(tempest.duration)]
+		tempest_button.disabled = not tempest_reason.is_empty()
+		tempest_button.tooltip_text = tempest_reason if not tempest_reason.is_empty() else "Tempest Array · 8 power · 180s charge · requires Vehicle Factory or Airfield"
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled) or (airfield_button.visible and not airfield_button.disabled) or (air_defense_button.visible and not air_defense_button.disabled) or (wall_button.visible and not wall_button.disabled) or (gate_button.visible and not gate_button.disabled)
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled) or (power_plant_button.visible and not power_plant_button.disabled) or (defense_button.visible and not defense_button.disabled) or (airfield_button.visible and not airfield_button.disabled) or (air_defense_button.visible and not air_defense_button.disabled) or (wall_button.visible and not wall_button.disabled) or (gate_button.visible and not gate_button.disabled) or (tempest_button.visible and not tempest_button.disabled)
 		var hint := "Choose a building, then place it." if any_available else reason
 		if builder != null:
 			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
@@ -210,6 +238,7 @@ func refresh_construction() -> void:
 		rows.show()
 		if builder != null:
 			site_status.text = "No construction assignment"
+	_refresh_tempest_controls()
 	_layout.call_deferred()
 
 
@@ -217,6 +246,7 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	if _context_active() and is_instance_valid(orientation_button):
 		_refresh_barrier_controls()
+		_refresh_tempest_controls()
 	if is_instance_valid(site_progress) and site_progress.visible:
 		if _displayed_site != null:
 			site_progress.value = _displayed_site.progress() * 100.0
@@ -245,6 +275,48 @@ func _begin_barrier(gate: bool) -> void:
 	var choice := world.gate_definition if gate else world.wall_definition
 	if choice != null and is_instance_valid(world.placement):
 		world.placement.begin(_placement_source(), choice)
+
+
+func _begin_tempest() -> void:
+	if _context_active() and field.gameplay_enabled:
+		var world := field as ConstructionField
+		var choice: ConstructionDefinition = world.get("tempest_definition")
+		if choice != null and is_instance_valid(world.placement):
+			world.placement.begin(_placement_source(), choice)
+
+
+func _launch_tempest() -> void:
+	if _context_active() and is_instance_valid(field.selection.tempest_targeting):
+		field.selection.tempest_targeting.begin(field.selection.selected_building() as TempestArray)
+		_refresh_tempest_controls()
+
+
+func _refresh_tempest_controls() -> void:
+	if not is_instance_valid(tempest_status):
+		return
+	var facility := field.selection.selected_building() as TempestArray
+	var operational := facility != null and facility.operational
+	tempest_status.visible = operational
+	tempest_progress.visible = operational
+	tempest_launch_button.visible = operational
+	if not operational:
+		return
+	# Override the generic producer-power line: this facility has no production.
+	selection_details.text = _health_text(facility.health) + "\nPower required: 8 · " + facility.status_text()
+	train_button.hide()
+	progress_bar.hide()
+	rows.hide()
+	var targeting := field.selection.tempest_targeting
+	var manager := field.get("tempest_strikes") as TempestStrikes
+	var reason := manager.launch_reason(facility, field.selection.friendly_owner_id) if is_instance_valid(manager) else "Launch unavailable"
+	if not is_instance_valid(self) or not _context_active() or not is_instance_valid(facility) or field.selection.selected_building() != facility:
+		return
+	tempest_progress.value = 100.0 * facility.charge / maxf(0.001, facility.charge + facility.charge_remaining())
+	tempest_status.text = "READY · one charge" if facility.is_ready() else "Charge · %.1fs powered time remaining" % facility.charge_remaining()
+	tempest_launch_button.disabled = not reason.is_empty() or (is_instance_valid(targeting) and targeting.active)
+	tempest_launch_button.tooltip_text = reason if not reason.is_empty() else "6s warning · Radius 10 · 1000 ground damage · Friendly fire"
+	feedback.text = targeting.feedback if is_instance_valid(targeting) and not targeting.feedback.is_empty() else "Ground only · 1000 damage · Friendly fire"
+	feedback.visible = true
 
 
 func _rotate_barrier() -> void:

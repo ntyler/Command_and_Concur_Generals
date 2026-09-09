@@ -12,6 +12,8 @@ var last_fire_line: LineOfFire.Trace
 
 
 func advance(delta: float) -> void:
+	if is_inside_tree() and get_tree().paused:
+		return
 	cooldown_remaining = maxf(0.0, cooldown_remaining - delta)
 
 

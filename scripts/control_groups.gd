@@ -197,6 +197,10 @@ func _clear_tap() -> void:
 	_last_tap_usec = 0
 
 
+func reset_input_timing() -> void:
+	_clear_tap()
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_focused = false
