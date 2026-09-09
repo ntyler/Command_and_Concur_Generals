@@ -4,7 +4,7 @@
 
 The user explicitly authorized forward feature development from the current working implementation, superseding the earlier requirement to resolve historical movement failures before starting another milestone.
 
-**Outstanding movement issues are DEFERRED KNOWN LIMITATIONS; their engineering status remains UNRESOLVED. They do not automatically block authorized feature development, now completed through Milestone 10. Full movement acceptance and full Milestone 5 regression acceptance have not passed.** This is a scheduling decision, not a bug closure, test waiver or claim of movement reliability.
+**Outstanding movement issues are DEFERRED KNOWN LIMITATIONS; their engineering status remains UNRESOLVED. They do not automatically block authorized feature development, now completed through Milestone 11. Full movement acceptance and full Milestone 5 regression acceptance have not passed.** This is a scheduling decision, not a bug closure, test waiver or claim of movement reliability.
 
 This decision supersedes earlier instructions in milestone/investigation reports that all subsequent work must remain blocked or that another movement investigation must come next. Those reports retain their historical results, failures, reproduction constraints and evidence. Closed historical execution budgets are not reopened.
 
@@ -30,6 +30,8 @@ At the priority decision, the repository documented milestones through Milestone
 | **8 / 8.1 — complete** | **Fully revealed minimap, groups 1–9, compact Help and contextual HUD in the combined-arms scene. All eight final acceptance groups pass in [Milestone 8.1](milestone-8.1.md); the earlier [M8 report](milestone-8.md) retains its historical scaffold.** |
 | **9 — attack-move; complete** | **All eight acceptance groups PASS. Q/button battlefield or minimap targeting for existing Rifles/Rockets, bounded automatic engagements and resumed original slots through existing movement/combat. Expanded/collapsed Help verified at 1280x720 and 1920x1080. See [Milestone 9](milestone-9.md).** |
 | **10 — enemy economy and repeat assaults; complete** | **All eight feature groups PASS in the separate economy-assault scene. Real harvesting funds paid Rifle production, staging and existing attack-move waves. Opponent/integration: 261 passing assertions in both modes. Full matrix: 59/60 executions, 7,393 assertions, three graphical movement-stress failures of unknown attribution, exit 1. See [Milestone 10](milestone-10.md).** |
+| **11 — Supply Depots and Collector production; complete** | **All eight feature groups PASS in Supply Depot Assault. Depot checks 272/284 and earned integration 80/81 pass both modes. Fresh-copy full matrix: 63/64 executions, 8,110 checks, three headless projection-fixture failures of unknown attribution, exit 1. See [Milestone 11](milestone-11.md).** |
+| **Next — builder-driven construction; scheduled before power generation** | HQ-produced Bulldozers select, reach, work and resume paid sites. Current HQ-based automatic construction is prototype behavior. This feature is scheduled, not implemented. |
 
 Milestone 6 gives construction, harvesting, production and combat a shared match objective. It uses a small flat map and existing units, resources and commands. Strategic AI, additional economic systems and general movement reliability work remain outside this milestone.
 
@@ -51,7 +53,26 @@ The [M10 report](milestone-10.md) saves all eight PASS feature groups, actual co
 
 **Unknown attribution:** graphical `movement_stress_checks` failed three `choke_30` arrival/traversal/settling assertions for unit 13. This occurrence is not established as pre-existing or newly introduced. Its failed log and metrics remain linked in M10, without retries or historical movement investigation. No M10 feature failures or demonstrated newly introduced regressions remain; documented deferred movement findings remain separately unresolved. Feature completion does not claim a clean full regression matrix or a human playtest.
 
-No strategic planner, rebuilds, free reinforcement income, fog of war, patrol/guard, stances, new gameplay unit types, multiplayer, automatic flanking or movement investigation is included. **Milestone 11 is not started or authorized by this task.**
+No strategic planner, rebuilds, free reinforcement income, fog of war, patrol/guard, stances, multiplayer, automatic flanking or movement investigation is included in the completed M10 scope.
+
+**Milestone 11 — Supply Depots and Collector production is COMPLETE.** Open `scenes/supply_depot_assault.tscn` in the installed Godot 4.7.2 and press F6, or launch with `--path . res://scenes/supply_depot_assault.tscn`. The prototype HQ builds a depot for 300 credits / ten simulated seconds; its completed 450-HP building trains ordinary unarmed Collectors for 200 credits / six seconds. Automatic deliveries choose the shortest usable owned HQ/depot route; explicit manual returns deliver once to the selected building. Deposits, finite resources, shared wallets, cancellation/refunds, safe deployment, enemy economy, minimap, contextual HUD and match-result/Restart remain integrated.
+
+The [M11 report](milestone-11.md) saves the real zero-credit depot-to-collector-to-Rifle ledger and corrected return fixture. Ordinary loaded movement makes both measured return origins comparable; the depot's 3.294-unit route delivers in 1.783 seconds versus HQ's 7.345 units / 2.783 seconds including unchanged unloading. This establishes the tested clear-route advantage, not universal income under congestion. Final fresh-copy import passes and the single expanded matrix completes **64/64 executions, 63 passing, 8,110 checks, three failures, phase exit 1**. All four M11 executions pass **717 checks**, and all enemy economy/lifecycle/UI compatibility suites pass. No human playtest occurred.
+
+**M11 unknown attribution:** headless `projection_step_checks` reports unit 41 FAILED after eight recoveries, producing all-participant arrival, settling/separation and unit-41 arrival failures. Its relationship to M11 changes or historical movement cases is unestablished. The graphical counterpart and both movement-stress modes pass. The failure remains saved without a clean-run retry; the previous M10 graphical stress failure and documented deferred movement findings also remain unresolved.
+
+## Next focused feature — builder-driven construction
+
+Scheduled by the user's clarified construction model, **before power generation**. This is the next feature after the M11 handoff; implementation has not begun. Headquarters-based automatic construction remains explicitly a prototype, not the final player-facing construction model.
+
+- Headquarters produce **Bulldozer units** through the existing production and safe-deployment systems.
+- Selecting an owned Bulldozer exposes available building choices, including Supply Depot. Valid placement creates an ordinary paid unfinished site using existing placement, payment, geometry and navigation systems.
+- The assigned Bulldozer must travel by ordinary movement to a valid working position and actively construct. Construction progresses only while an eligible assigned owned Bulldozer is working at that site.
+- Moving, stopping, losing or otherwise invalidating the builder pauses construction. Another owned Bulldozer can be assigned to resume the unfinished site without purchasing the site again.
+- Bulldozers construct buildings. Supply Depots produce Supply Trucks/Collectors, which gather and deliver supplies and do not construct buildings.
+- Extend the existing construction, production, harvesting, payment, placement, navigation and lifecycle systems. Preserve paid-site accounting, cancellation/refunds, bounded navigation updates, destruction, callbacks, match freeze and Restart; do not replace these systems.
+
+The focused acceptance should prove HQ-produced builders, builder-selected placement, real approach and work eligibility, progress gating, Move/Stop/death pause, another builder's resumption, and depot/collector separation in the playable flow. Costs, health, work rate and presentation remain feature implementation decisions; no invented defaults or power system are implemented in this handoff.
 
 ## Baseline and validation provenance
 
