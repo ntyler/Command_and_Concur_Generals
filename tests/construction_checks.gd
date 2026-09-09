@@ -141,17 +141,28 @@ func _placement_checks() -> void:
 	world.placement.begin(world.headquarters)
 	await _click(_world_screen(Vector3(-25, 0, 18)), MOUSE_BUTTON_LEFT)
 	_check(world.placement.active and manager.sites.is_empty() and world.credits.balance(1) == 1000 and not world.placement.last_result.accepted, "footprint edge outside build area is rejected even with center on terrain")
+	# The preceding pan/zoom still changes the world point under a fixed pixel.
+	# Wait for ordinary camera settling, then aim again and observe an actual
+	# advisory approval. A fixed eight frames can sample "Checking placement".
+	if not await _until(func() -> bool: return world.camera_rig.pan_velocity.length() < 0.001 and absf(world.camera_rig.zoom - world.camera_rig.target_zoom) < 0.001, 2.0, "stale-preview setup lets ordinary pan and zoom settle"):
+		return
 	_motion(_world_screen(FIRST))
-	await _frames(8)
-	_check(world.placement.valid, "stale-preview fixture initially valid")
+	if not await _until(func() -> bool: return world.placement.valid and world.placement.preview.visible and world.placement.point.distance_to(FIRST) < 0.02 and world.placement.point.is_equal_approx(world.placement._checked_point), 0.3, "stale-preview setup obtains current approval at the intended footprint"):
+		return
+	_check(world.placement.valid and world.placement.reason.is_empty() and world.placement.status.text.begins_with("Valid"), "stale-preview fixture initially valid")
+	await physics_frame
+	_check(manager.validate(1, world.headquarters, world.construction_definition, world.placement.point).is_empty() and manager.validate(1, world.headquarters, world.construction_definition, FIRST).is_empty(), "stale-preview footprint is authoritatively valid before unit entry")
+	var previous_result := world.placement.last_result
+	var approved_point := world.placement._checked_point
 	var visitor := world.units[0]
 	visitor.global_position = FIRST + Vector3(2.9, 0, 0)
 	visitor.halt_motion()
 	# No refreshed advisory preview between occupancy and click.
+	_check(world.placement.valid and world.placement._checked_point == approved_point, "unit enters while the prior advisory approval is still cached")
 	_button(_world_screen(FIRST), MOUSE_BUTTON_LEFT, true)
 	_button(_world_screen(FIRST), MOUSE_BUTTON_LEFT, false)
 	await _frames(2)
-	_check(not world.placement.last_result.accepted and world.placement.active and manager.sites.is_empty() and world.credits.balance(1) == 1000, "authoritative confirm rejects unit entering the footprint after valid preview")
+	_check(world.placement.last_result != previous_result and not world.placement.last_result.accepted and world.placement.last_result.reason.to_lower().contains("occup") and world.placement.active and manager.sites.is_empty() and world.credits.balance(1) == 1000, "authoritative confirm rejects unit entering the footprint after valid preview")
 	visitor.global_position = ProductionField.STARTS[0]
 	await _frames(3)
 	for position in [Vector3(-20, 0, -7), Vector3(-7, 0, -16), Vector3(-1, 0, -6), Vector3(7, 0, -10), Vector3(0, 1, 17), Vector3(INF, 0, 0)]:
