@@ -6,6 +6,7 @@ const BUILD_AREA := Rect2(-27, -21, 54, 43)
 const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -13.3, 3, 9), Rect2(-27, 10, 25, 2)]
 @export var construction_definition: ConstructionDefinition = preload("res://construction/barracks.tres")
 @export var vehicle_factory_definition: ConstructionDefinition
+@export var supply_depot_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
 var construction: BuildingConstruction
 var placement: BuildingPlacement
@@ -60,6 +61,10 @@ func create_production_panel() -> ProductionPanel:
 	return ConstructionPanel.new()
 
 
+func dropoff_command_hint() -> String:
+	return "HQ / depot" if supply_depot_definition != null else "HQ"
+
+
 func _physics_process(delta: float) -> void:
 	construction.advance(delta)
 
@@ -94,7 +99,7 @@ func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVec
 
 
 func supports_construction(definition: ConstructionDefinition) -> bool:
-	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition)
+	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition)
 
 
 func protected_areas() -> Array[Rect2]:
@@ -102,6 +107,10 @@ func protected_areas() -> Array[Rect2]:
 	var targets: Array[Node3D] = []
 	if is_instance_valid(headquarters) and contains_building(headquarters):
 		targets.append(headquarters)
+	# Sites reserve their delivery bays immediately, before becoming operational.
+	for building in registered_buildings():
+		if building.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
+			targets.append(building)
 	for cache in caches:
 		if is_instance_valid(cache) and contains_cache(cache):
 			targets.append(cache)
@@ -121,6 +130,16 @@ func protected_areas() -> Array[Rect2]:
 
 func exit_area(rectangle: Rect2) -> Rect2:
 	return Rect2(rectangle.end.x, rectangle.get_center().y - 1.8, 3.1, 3.6)
+
+
+func depot_access_areas(rectangle: Rect2) -> Array[Rect2]:
+	var areas: Array[Rect2] = []
+	var center := rectangle.get_center()
+	for access in RTSBuilding.depot_access_layout(Vector3(center.x, 0, center.y), rectangle.size):
+		var point: Vector3 = access["point"]
+		var dock: Vector3 = access["dock"]
+		areas.append(Rect2(Vector2(point.x, point.z), Vector2(dock.x - point.x, dock.z - point.z)).abs().grow(0.7))
+	return areas
 
 
 func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> String:
@@ -143,6 +162,15 @@ func placement_geometry(point: Vector3, definition: ConstructionDefinition) -> S
 	for occupied in obstacles:
 		if exit_rectangle.intersects(occupied.grow(CLEARANCE), true):
 			return "%s exit would be obstructed" % definition.display_name()
+	if definition.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
+		# The same layout drives delivery, placement and future protected access.
+		# Existing units can leave a bay normally; fixed geometry cannot cover it.
+		for access in depot_access_areas(rectangle):
+			if not BUILD_AREA.encloses(access):
+				return "Supply Depot delivery access must fit inside the construction area"
+			for occupied in obstacles:
+				if access.intersects(occupied.grow(CLEARANCE), true):
+					return "Supply Depot delivery access would be obstructed"
 	for sample: Vector2 in [clear.position, Vector2(clear.end.x, clear.position.y), clear.end, Vector2(clear.position.x, clear.end.y), clear.get_center()]:
 		_ground_query.from = Vector3(sample.x, 4, sample.y)
 		_ground_query.to = Vector3(sample.x, -1, sample.y)

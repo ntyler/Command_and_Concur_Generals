@@ -36,11 +36,13 @@ func _ready() -> void:
 	# Keep all 14px instructions above the objective's outer edge at 720p.
 	help_content.add_theme_constant_override("separation", 6)
 	column.add_child(help_content)
-	_label(help_content, "FIELDWORK / COMBINED ARMS", Color("a7ecdf"))
+	_label(help_content, "FIELDWORK / SUPPLY DEPOT ASSAULT" if field.supply_depot_definition != null else "FIELDWORK / COMBINED ARMS", Color("a7ecdf"))
 	_label(help_content, "WASD / arrows / edges · Pan    Wheel · Zoom\nClick / drag · Select units    Shift · Toggle / add\nClick owned building · Select building\nRight-click ground · Move    X · Stop\nRight-click hostile · Attack with combat units")
 	if field.attack_move_enabled:
 		_label(help_content, "Q / Attack Move · Then click ground or minimap\nEngage enemies along the route, then resume travel\nOrdinary Move only travels · Right-click / Esc cancels targeting")
-	_label(help_content, "Collectors + right-click supply · Harvest\nLoaded collectors + right-click owned HQ · Deposit\nHQ · Build Barracks or Vehicle Factory\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access")
+	var dropoff_hint := "owned HQ / depot" if field.supply_depot_definition != null else "owned HQ"
+	var build_hint := "HQ · Build Barracks / Factory / Supply Depot" if field.supply_depot_definition != null else "HQ · Build Barracks or Vehicle Factory"
+	_label(help_content, "Collectors + right-click supply · Harvest\nLoaded collectors + right-click %s · Deposit\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access" % [dropoff_hint, build_hint])
 	_label(help_content, "Minimap · Left-click to center; right-click to Move\nCtrl + 1–9 · Assign group    1–9 · Recall\nDouble-tap same number · Recall and center\nEsc · Close Help / cancel drag    F3 · Diagnostics")
 	_label(help_content, "Destroy enemy HQ · Protect your HQ\nHarvest → build production → train → attack\nMint · Your team    Coral · Enemy    Walls block fire", Color("ffce78"))
 	set_open(false)

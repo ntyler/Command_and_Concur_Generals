@@ -57,6 +57,10 @@ func create_production_panel() -> ProductionPanel:
 	return ProductionPanel.new()
 
 
+func dropoff_command_hint() -> String:
+	return "HQ"
+
+
 func set_movement_debug(enabled: bool) -> void:
 	super.set_movement_debug(enabled)
 	for building in registered_buildings():
@@ -113,7 +117,7 @@ func register_building(building: RTSBuilding) -> void:
 	building.set_movement_debug(movement_debug)
 	var id := building.get_instance_id()
 	_buildings[id] = weakref(building)
-	if building.kind in [RTSBuilding.Kind.BARRACKS, RTSBuilding.Kind.VEHICLE_FACTORY] and not _producers.has(id):
+	if building.kind in [RTSBuilding.Kind.BARRACKS, RTSBuilding.Kind.VEHICLE_FACTORY, RTSBuilding.Kind.SUPPLY_DEPOT] and not _producers.has(id):
 		building.production = UnitProduction.new(self, building, credits)
 		_producers[id] = building.production
 	var exiting := _building_exiting.bind(id)
@@ -243,7 +247,8 @@ func prepare_deployment(scene: PackedScene, owner_id: int, point: Vector3) -> RT
 	var unit := instance as RTSUnit
 	_next_unit += 1
 	unit.unit_id = _next_unit
-	unit.name = "Produced%s%03d" % ["RocketVehicle" if unit.combat_weapon == preload("res://weapons/rocket.tres") else "Rifle", unit.unit_id]
+	var unit_kind := "Collector" if unit.get_script() == load("res://scripts/collector_truck.gd") else ("RocketVehicle" if unit.combat_weapon == preload("res://weapons/rocket.tres") else "Rifle")
+	unit.name = "Produced%s%03d" % [unit_kind, unit.unit_id]
 	unit.owner_id = owner_id
 	unit.position = point
 	unit.hide()

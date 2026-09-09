@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/economy_assault.tscn" id="1"]
+[ext_resource type="Resource" path="res://construction/supply_depot.tres" id="2"]
+
+[node name="SupplyDepotAssault" instance=ExtResource("1")]
+supply_depot_definition = ExtResource("2")
+restart_scene = "res://scenes/supply_depot_assault.tscn"

@@ -155,7 +155,7 @@ func _refresh() -> void:
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_theme_constant_override("separation", 3)
 		rows.add_child(row)
-		var compact_name := str(job["name"]).replace("Rifle Unit", "Rifle").replace("Rocket Vehicle", "Rocket")
+		var compact_name := str(job["name"]).replace("Rifle Unit", "Rifle").replace("Rocket Vehicle", "Rocket").replace("Collector Truck", "Collector")
 		var label := _label(row, "#%d %s" % [job["id"], compact_name])
 		label.add_theme_font_size_override("font_size", 14)
 		label.clip_text = true
@@ -245,7 +245,8 @@ func _commands(units: Array[RTSUnit]) -> String:
 	if armed:
 		commands += "\nRight-click hostile · Attack"
 	if collecting:
-		commands += "\nCollector + right-click supply / HQ · Harvest / deposit"
+		var dropoffs := field.dropoff_command_hint()
+		commands += "\nCollector + right-click supply / %s · Harvest / deposit" % dropoffs
 	return commands
 
 

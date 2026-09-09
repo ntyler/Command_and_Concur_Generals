@@ -15,14 +15,21 @@ func is_valid() -> bool:
 	if unit_scene == null or not unit_scene.can_instantiate():
 		return false
 	var instance := unit_scene.instantiate()
-	# Both recipes compose the existing RTSUnit controller/body, with its normal
-	# weapon and health configuration. Arbitrary scripts/children remain unsupported.
-	var valid: bool = instance is RTSUnit and instance.get_script() == load("res://scripts/rts_unit.gd") and instance.get_child_count() == 0
+	# Recipes compose existing unit controllers, preserving their normal settings.
+	# Arbitrary scripts, added children and scaled collision bodies remain unsupported.
+	var valid: bool = instance is RTSUnit and instance.get_child_count() == 0
 	if valid:
 		var unit := instance as RTSUnit
-		var rifle := identifier == &"rifle" and unit.combat_weapon == preload("res://weapons/rifle.tres") and unit.maximum_health == 100.0
-		var rocket := identifier == &"rocket_vehicle" and unit.combat_weapon == preload("res://weapons/rocket.tres") and unit.maximum_health == 150.0
-		valid = (rifle or rocket) and unit.movement_speed == 5.0 and unit.scale == Vector3.ONE
+		var combat_script: bool = unit.get_script() == load("res://scripts/rts_unit.gd")
+		var rifle: bool = combat_script and identifier == &"rifle" and unit.combat_weapon == preload("res://weapons/rifle.tres") and unit.maximum_health == 100.0
+		var rocket: bool = combat_script and identifier == &"rocket_vehicle" and unit.combat_weapon == preload("res://weapons/rocket.tres") and unit.maximum_health == 150.0
+		# Resolve the specific collector script at runtime, avoiding an eager
+		# recipe -> collector -> field -> construction-resource preload cycle.
+		var collector: Variant = unit if unit.get_script() == load("res://scripts/collector_truck.gd") else null
+		var collecting: bool = identifier == &"collector_truck" and collector != null
+		if collecting:
+			collecting = unit.combat_weapon == null and unit.damageable and unit.maximum_health == 150.0 and unit.movement_speed == 4.0 and not unit.retaliation_enabled and collector.cargo_capacity == 100 and collector.loading_amount == 25 and collector.loading_interval == 1.0 and collector.unloading_duration == 1.0 and collector.interaction_distance == 0.3
+		valid = (((rifle or rocket) and unit.movement_speed == 5.0) or collecting) and unit.scale == Vector3.ONE
 	instance.free()
 	return valid
 

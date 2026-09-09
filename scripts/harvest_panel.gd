@@ -73,6 +73,10 @@ func _refresh() -> void:
 		elif work.state == CollectorHarvest.State.IDLE and unit.movement_state == RTSUnit.MovementState.FAILED:
 			activity = "Movement failed"
 		lines.append("%sCargo %d / %d · %s" % [identity, work.cargo, unit.cargo_capacity, activity])
+		var dropoff := work.dropoff_node()
+		if is_instance_valid(dropoff) and field.valid_dropoff(dropoff, unit.owner_id):
+			_watch(dropoff, &"availability_changed")
+			lines.append("Drop-off · %s" % dropoff.display_name())
 		var cache := work.cache_node()
 		if is_instance_valid(cache) and field.contains_cache(cache):
 			_watch(cache.notifications, &"changed")

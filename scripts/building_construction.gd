@@ -75,6 +75,8 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 	body.owner_id = requester
 	body.kind = definition.kind
 	body.recipe = load("res://production/rocket_vehicle.tres") if body.kind == RTSBuilding.Kind.VEHICLE_FACTORY else load("res://production/rifle.tres")
+	if body.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
+		body.recipe = load("res://production/collector_truck.tres")
 	body.footprint = definition.footprint
 	body.building_height = definition.height
 	body.name = "Built%s%d" % [definition.display_name().replace(" ", ""), site.site_id]

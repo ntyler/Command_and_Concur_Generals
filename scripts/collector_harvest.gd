@@ -24,6 +24,9 @@ var _elapsed: float = 0.0
 var _advancing: bool = false
 var _transferring: bool = false
 var _closed: bool = false
+var _failed_dropoffs: Array[int] = []
+var _alternative_used: bool = false
+var _pending_return: bool = false
 
 
 func _init(unit: CollectorTruck) -> void:
@@ -43,6 +46,10 @@ func cache_node() -> SupplyCache:
 
 
 func headquarters_node() -> RTSBuilding:
+	return dropoff_node() # Compatibility for existing observers.
+
+
+func dropoff_node() -> RTSBuilding:
 	return _hq.get_ref() as RTSBuilding if _hq != null else null
 
 
@@ -63,9 +70,8 @@ func can_order(target: Node3D, loop: bool) -> bool:
 	var field := unit.gameplay_field as HarvestField
 	if not field.harvest_member(unit) or not _configured(unit) or not is_instance_valid(target):
 		return false
-	var hq := field.headquarters_for_owner(unit.owner_id) if loop else target as RTSBuilding
-	if not is_instance_valid(hq) or not field.valid_dropoff(hq, unit.owner_id):
-		last_rejection = "No owned headquarters"
+	if (loop and field.eligible_dropoffs(unit.owner_id).is_empty()) or (not loop and not field.valid_dropoff(target as RTSBuilding, unit.owner_id)):
+		last_rejection = "No owned operational drop-off"
 		return false
 	if loop and (not target is SupplyCache or not field.contains_cache(target as SupplyCache) or (target as SupplyCache).depleted):
 		last_rejection = "Supply unavailable or depleted"
@@ -73,8 +79,8 @@ func can_order(target: Node3D, loop: bool) -> bool:
 	if not loop and cargo <= 0:
 		last_rejection = "No cargo to deposit"
 		return false
-	var trip_target: Node3D = hq if not loop or cargo >= unit.cargo_capacity else target
-	if field.plan_access(unit, trip_target).is_empty():
+	var access := field.choose_dropoff(unit) if loop and cargo >= unit.cargo_capacity else field.plan_access(unit, target)
+	if access.is_empty():
 		last_rejection = "No reachable access position"
 		return false
 	return true
@@ -89,7 +95,7 @@ func issue(target: Node3D, loop: bool) -> bool:
 	_field = weakref(field)
 	_owner = unit.owner_id
 	_cache = weakref(target) if loop else null
-	_hq = weakref(field.headquarters_for_owner(unit.owner_id) if loop else target)
+	_hq = null if loop else weakref(target)
 	automatic = loop
 	last_rejection = ""
 	_begin_trip(not loop or cargo >= unit.cargo_capacity)
@@ -107,6 +113,9 @@ func interrupt() -> int:
 	_hq = null
 	_access = {}
 	_elapsed = 0.0
+	_failed_dropoffs.clear()
+	_alternative_used = false
+	_pending_return = false
 	automatic = false
 	state = State.IDLE
 	reason = "Idle"
@@ -124,7 +133,7 @@ func _stop_work(message: String, blocked: bool = false) -> void:
 	reason = message
 	state = State.BLOCKED if blocked else State.IDLE
 	var unit := unit_node()
-	if is_instance_valid(unit) and unit.is_inside_tree():
+	if is_instance_valid(unit) and unit.is_inside_tree() and unit.movement_state != RTSUnit.MovementState.FAILED:
 		unit.halt_motion()
 	publish(version)
 
@@ -142,10 +151,15 @@ func _begin_trip(returning: bool) -> void:
 		return
 	var unit := unit_node()
 	var field := field_node()
-	if not field.valid_dropoff(headquarters_node(), _owner):
-		_stop_work("No owned headquarters · cargo retained", true)
+	if returning:
+		_failed_dropoffs.clear()
+		_alternative_used = false
+		_start_return()
 		return
-	var target: Node3D = headquarters_node() if returning else cache_node()
+	if field.eligible_dropoffs(_owner).is_empty():
+		_stop_work("No owned drop-off · cargo retained", true)
+		return
+	var target: Node3D = cache_node()
 	if not is_instance_valid(target):
 		_stop_work("Destination unavailable", true)
 		return
@@ -153,25 +167,82 @@ func _begin_trip(returning: bool) -> void:
 	if access.is_empty():
 		_stop_work("Blocked · no reachable access", true)
 		return
+	_hq = null
+	_travel(access, false)
+
+
+func _start_return() -> void:
+	if not _live():
+		return
+	var unit := unit_node()
+	var field := field_node()
+	# A destruction may be synchronizing navigation. Wait for that existing
+	# barrier before consuming the one alternative query; never query stale maps.
+	if unit.navigation_suspended:
+		_pending_return = true
+		state = State.RETURNING
+		reason = "Waiting for navigation · cargo retained"
+		_elapsed = 0.0
+		return
+	_pending_return = false
+	var access: Dictionary = {}
+	if automatic:
+		var choice := field.choose_dropoff(unit, _failed_dropoffs)
+		if not choice.is_empty():
+			_hq = weakref(choice["building"])
+			access = choice["access"]
+	elif field.valid_dropoff(dropoff_node(), _owner):
+		access = field.plan_access(unit, dropoff_node())
+	if access.is_empty():
+		_stop_work("No usable drop-off · cargo retained", true)
+		return
+	_travel(access, true)
+
+
+func _travel(access: Dictionary, returning: bool) -> void:
+	var field := field_node()
+	var unit := unit_node()
 	field.release_access(unit)
 	_access = access
 	field.claim_access(unit, access)
 	_elapsed = 0.0
 	state = State.RETURNING if returning else State.TO_SUPPLIES
-	reason = "Returning to HQ" if returning else "Travelling to supply"
+	reason = "Returning to " + dropoff_node().display_name() if returning else "Travelling to supply"
 	var version := generation
 	var accepted := unit.harvest_move(access["point"])
 	if version != generation or not _live():
 		return
 	if not accepted:
-		_stop_work("Blocked · movement rejected", true)
+		if returning:
+			_return_failed("Blocked · movement rejected")
+		else:
+			_stop_work("Blocked · movement rejected", true)
 	else:
 		publish(version)
+
+
+func _return_failed(message: String) -> void:
+	if not _live():
+		return
+	if not automatic or _alternative_used:
+		_stop_work(message + " · cargo retained", true)
+		return
+	_alternative_used = true
+	if not _access.is_empty():
+		_failed_dropoffs.append(int(_access["target"]))
+	field_node().release_access(unit_node())
+	_access = {}
+	_hq = null
+	_elapsed = 0.0
+	_start_return()
 
 
 func advance(delta: float) -> void:
 	if _closed or _advancing or _transferring or not is_finite(delta) or delta <= 0.0 or state == State.IDLE or state == State.BLOCKED:
 		return
+	var field := field_node()
+	if is_instance_valid(field) and not field.gameplay_enabled:
+		return # Match freeze includes selection/dispatch and all timer state.
 	_advancing = true
 	_tick(delta)
 	_advancing = false
@@ -183,11 +254,17 @@ func _tick(delta: float) -> void:
 		return
 	var unit := unit_node()
 	var field := field_node()
+	if _pending_return:
+		_start_return()
+		return
 	var hq := headquarters_node()
-	if not field.valid_dropoff(hq, _owner):
-		_stop_work("No owned headquarters · cargo retained", true)
+	if state in [State.RETURNING, State.UNLOADING] and not field.valid_dropoff(hq, _owner):
+		_return_failed("Drop-off unavailable")
 		return
 	if state == State.TO_SUPPLIES or state == State.LOADING:
+		if field.eligible_dropoffs(_owner).is_empty():
+			_stop_work("No owned drop-off · cargo retained", true)
+			return
 		var cache := cache_node()
 		if not field.contains_cache(cache) or cache.depleted:
 			if cargo > 0:
@@ -197,6 +274,9 @@ func _tick(delta: float) -> void:
 			return
 	if state == State.TO_SUPPLIES or state == State.RETURNING:
 		if unit.movement_state == RTSUnit.MovementState.FAILED:
+			if state == State.RETURNING:
+				_return_failed("Blocked route")
+				return
 			# Preserve the mover's exhausted recovery history for diagnosis.
 			var version := interrupt()
 			state = State.BLOCKED
@@ -206,7 +286,10 @@ func _tick(delta: float) -> void:
 		if not unit.moving:
 			var target: Node3D = cache_node() if state == State.TO_SUPPLIES else hq
 			if not field.can_interact(unit, target, _access):
-				_stop_work("Blocked interaction · cargo retained", true)
+				if state == State.RETURNING:
+					_return_failed("Blocked interaction")
+				else:
+					_stop_work("Blocked interaction · cargo retained", true)
 				return
 			state = State.LOADING if state == State.TO_SUPPLIES else State.UNLOADING
 			reason = "Loading" if state == State.LOADING else "Unloading"
@@ -241,7 +324,7 @@ func complete_loading() -> HarvestTransfer:
 	var cache := cache_node()
 	if _elapsed + 0.000001 < unit.loading_interval:
 		return empty
-	if not field.valid_dropoff(headquarters_node(), _owner) or not field.contains_cache(cache) or not field.can_interact(unit, cache, _access):
+	if field.eligible_dropoffs(_owner).is_empty() or not field.contains_cache(cache) or not field.can_interact(unit, cache, _access):
 		_stop_work("Loading unavailable · cargo retained", true)
 		return empty
 	_transferring = true
@@ -279,7 +362,7 @@ func complete_deposit() -> HarvestTransfer:
 	if _elapsed + 0.000001 < unit.unloading_duration:
 		return empty
 	if not field.valid_dropoff(hq, _owner) or not field.can_interact(unit, hq, _access):
-		_stop_work("Deposit unavailable · cargo retained", true)
+		_return_failed("Deposit unavailable")
 		return empty
 	var wallet := field.credits
 	var amount := cargo

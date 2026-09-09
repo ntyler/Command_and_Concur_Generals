@@ -3,6 +3,7 @@ extends ProductionPanel
 
 var build_button: Button
 var factory_button: Button
+var depot_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
@@ -21,6 +22,11 @@ func _ready() -> void:
 	factory_button.add_theme_font_size_override("font_size", 14)
 	column.add_child(factory_button)
 	factory_button.pressed.connect(_begin_factory)
+	depot_button = Button.new()
+	depot_button.focus_mode = Control.FOCUS_NONE
+	depot_button.add_theme_font_size_override("font_size", 14)
+	column.add_child(depot_button)
+	depot_button.pressed.connect(_begin_depot)
 	site_status = _label(column, "")
 	site_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	site_status.add_theme_font_size_override("font_size", 14)
@@ -56,10 +62,16 @@ func refresh_construction() -> void:
 	if factory != null:
 		factory_button.text = "Build Vehicle Factory · %d cr · %s s" % [factory.credit_cost, str(factory.duration)]
 		factory_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, building, factory).is_empty()
+	var depot := world.supply_depot_definition
+	depot_button.visible = build_button.visible and depot != null
+	if depot != null:
+		depot_button.text = "Build Supply Depot · %d cr · %s s" % [depot.credit_cost, str(depot.duration)]
+		depot_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, building, depot).is_empty()
 	if build_button.visible:
 		var reason := world.construction.can_begin(field.selection.friendly_owner_id, building, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
-		feedback.text = reason if not reason.is_empty() else "Choose a building, then place it."
+		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled)
+		feedback.text = "Choose a building, then place it." if any_available else reason
 	var site := (building as ConstructionBuilding).site if building is ConstructionBuilding else null
 	var unfinished := site != null and site.state != ConstructionSite.State.OPERATIONAL
 	site_status.visible = unfinished
@@ -103,6 +115,14 @@ func _begin_factory() -> void:
 	var world := field as ConstructionField
 	if world.vehicle_factory_definition != null and is_instance_valid(world.placement):
 		world.placement.begin(field.selection.selected_building(), world.vehicle_factory_definition)
+
+
+func _begin_depot() -> void:
+	if not _context_active() or not field.gameplay_enabled:
+		return
+	var world := field as ConstructionField
+	if world.supply_depot_definition != null and is_instance_valid(world.placement):
+		world.placement.begin(field.selection.selected_building(), world.supply_depot_definition)
 
 
 func _cancel_site() -> void:

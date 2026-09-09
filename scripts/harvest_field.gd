@@ -11,16 +11,19 @@ var harvest_panel: HarvestPanel
 var _caches: Dictionary[int, WeakRef] = {}
 var _access_claims: Dictionary = {} # target instance ID -> at most eight weak occupants.
 var _interaction_query := PhysicsRayQueryParameters3D.new()
+var _access_query := PhysicsShapeQueryParameters3D.new()
 
 
 func _ready() -> void:
 	_next_unit = STARTS.size() + COLLECTOR_STARTS.size()
 	_interaction_query.collision_mask = 4 | LineOfFire.BLOCKER_MASK
 	_interaction_query.hit_from_inside = true
+	_access_query.shape = RTSUnit.body_shape()
+	_access_query.collision_mask = 2 | 4 | LineOfFire.BLOCKER_MASK
+	_access_query.margin = 0.001
 	super._ready()
 	selection.harvest_requested.connect(issue_harvest)
 	selection.deposit_requested.connect(issue_deposit)
-	headquarters.tree_exiting.connect(_release_target.bind(headquarters.get_instance_id()))
 	harvest_panel = HarvestPanel.new()
 	harvest_panel.field = self
 	production_panel.context_content.add_child(harvest_panel)
@@ -53,6 +56,18 @@ func _create_unit(index: int) -> RTSUnit:
 	unit.position = COLLECTOR_STARTS[index - STARTS.size()]
 	collectors.append(unit)
 	return unit
+
+
+func register_unit(unit: RTSUnit) -> void:
+	super.register_unit(unit)
+	if unit is CollectorTruck and contains_unit(unit) and not collectors.has(unit):
+		collectors.append(unit)
+
+
+func unregister_unit(unit: RTSUnit) -> void:
+	if is_instance_valid(unit) and unit is CollectorTruck:
+		release_access(unit)
+	super.unregister_unit(unit)
 
 
 func _build_obstacle(index: int, rectangle: Rect2) -> void:
@@ -119,17 +134,51 @@ func _release_target(id: int) -> void:
 	_access_claims.erase(id)
 
 
+func register_building(building: RTSBuilding) -> void:
+	super.register_building(building)
+	if is_instance_valid(building) and contains_building(building):
+		var departed := _release_target.bind(building.get_instance_id())
+		if not building.availability_changed.is_connected(departed):
+			building.availability_changed.connect(departed)
+
+
 func headquarters_for_owner(owner: int) -> RTSBuilding:
-	if valid_dropoff(headquarters, owner):
+	if valid_dropoff(headquarters, owner) and headquarters.kind == RTSBuilding.Kind.HEADQUARTERS:
 		return headquarters
 	for building in registered_buildings():
-		if valid_dropoff(building, owner):
+		if valid_dropoff(building, owner) and building.kind == RTSBuilding.Kind.HEADQUARTERS:
 			return building
 	return null
 
 
 func valid_dropoff(building: RTSBuilding, owner: int) -> bool:
-	return is_instance_valid(building) and contains_building(building) and building.kind == RTSBuilding.Kind.HEADQUARTERS and building.owner_id == owner
+	return gameplay_enabled and is_instance_valid(building) and contains_building(building) and building.gameplay_field == self and building.is_drop_off() and building.operational and building.owner_id == owner
+
+
+func eligible_dropoffs(owner: int) -> Array[RTSBuilding]:
+	var eligible: Array[RTSBuilding] = []
+	for building in registered_buildings():
+		if valid_dropoff(building, owner):
+			eligible.append(building)
+	eligible.sort_custom(func(a: RTSBuilding, b: RTSBuilding) -> bool: return a.get_instance_id() < b.get_instance_id())
+	return eligible
+
+
+func choose_dropoff(unit: CollectorTruck, excluded: Array[int] = []) -> Dictionary:
+	if not harvest_member(unit):
+		return {}
+	var best: Dictionary = {}
+	var shortest := INF
+	# Field-local registry only, at trip boundaries or one bounded invalidation.
+	# Instance identity is stable for the lifetime of the registered building.
+	for building in eligible_dropoffs(unit.owner_id):
+		if building.get_instance_id() in excluded:
+			continue
+		var access := plan_access(unit, building)
+		if not access.is_empty() and float(access["route_length"]) < shortest - 0.001:
+			shortest = access["route_length"]
+			best = {"building": building, "access": access, "route_length": shortest}
+	return best
 
 
 func _valid_access_target(target: Node3D, owner: int) -> bool:
@@ -139,6 +188,8 @@ func _valid_access_target(target: Node3D, owner: int) -> bool:
 
 
 func access_positions(target: Node3D) -> Array[Dictionary]:
+	if target is RTSBuilding and target.kind == RTSBuilding.Kind.SUPPLY_DEPOT:
+		return (target as RTSBuilding).deposit_access_positions()
 	var footprint: Vector2 = target.footprint
 	var positions: Array[Dictionary] = []
 	for axis in [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:
@@ -163,11 +214,29 @@ func plan_access(unit: CollectorTruck, target: Node3D) -> Dictionary:
 		if is_instance_valid(occupant) and harvest_member(occupant) and occupant != unit:
 			continue
 		var point: Vector3 = candidate["point"]
-		var length := unit.global_position.distance_squared_to(point)
-		if length < distance and valid_rally(unit.global_position, point):
+		if not valid_rally(unit.global_position, point) or not _clear_access(unit, candidate):
+			continue
+		var path := NavigationServer3D.map_get_path(get_world_3d().get_navigation_map(), unit.global_position, point, true)
+		var length := unit.global_position.distance_to(path[0])
+		for index in range(1, path.size()):
+			length += path[index - 1].distance_to(path[index])
+		if length < distance - 0.001:
+			candidate["route_length"] = length
 			best = candidate
 			distance = length
 	return best
+
+
+func _clear_access(unit: CollectorTruck, access: Dictionary) -> bool:
+	# A valid nav projection alone cannot prove capsule or interaction clearance.
+	var point: Vector3 = access["point"]
+	_access_query.exclude = [unit.get_rid()]
+	_access_query.transform = Transform3D(Basis.IDENTITY, point + Vector3.UP * RTSUnit.BODY_HEIGHT / 2.0)
+	if not get_world_3d().direct_space_state.intersect_shape(_access_query, 1).is_empty():
+		return false
+	_interaction_query.from = point + Vector3.UP * 0.6
+	_interaction_query.to = access["dock"] + Vector3.UP * 0.6
+	return get_world_3d().direct_space_state.intersect_ray(_interaction_query).is_empty()
 
 
 func claim_access(unit: CollectorTruck, access: Dictionary) -> void:
@@ -194,6 +263,10 @@ func can_interact(unit: CollectorTruck, target: Node3D, access: Dictionary) -> b
 	var id := target.get_instance_id()
 	var claims: Dictionary = _access_claims.get(id, {})
 	if access["target"] != id or not claims.has(access["slot"]) or claims[access["slot"]].get_ref() != unit:
+		return false
+	var positions := access_positions(target)
+	var slot := int(access["slot"])
+	if slot < 0 or slot >= positions.size() or (positions[slot]["point"] as Vector3).distance_to(access["point"]) > 0.02 or (positions[slot]["dock"] as Vector3).distance_to(access["dock"]) > 0.02:
 		return false
 	var point: Vector3 = access["point"]
 	if unit.moving or unit.movement_state != RTSUnit.MovementState.ARRIVED or unit.global_position.distance_to(point) > unit.interaction_distance or not _nav_point(point):
@@ -235,7 +308,7 @@ func _dispatch_resource(result: CommandBatchResult, selected: Array[RTSUnit], ow
 		if is_instance_valid(unit) and unit is CollectorTruck and TeamRules.is_controlled(self, unit, owner) and (unit as CollectorTruck).harvesting.can_order(target, automatic):
 			eligible = true
 	if not eligible:
-		_owner_feedback(owner, "Harvest rejected · select collector, nonempty supply and owned HQ")
+		_owner_feedback(owner, "Harvest rejected · select collector, supply and owned drop-off")
 		return result
 	_commit_owner_command(owner, result.generation)
 	for i in selected.size():
@@ -258,4 +331,5 @@ func _dispatch_resource(result: CommandBatchResult, selected: Array[RTSUnit], ow
 func _exit_tree() -> void:
 	_access_claims.clear()
 	_caches.clear()
+	collectors.clear()
 	super._exit_tree()

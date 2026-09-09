@@ -2,7 +2,7 @@ class_name RTSBuilding
 extends StaticBody3D
 ## Fixed primitive footprint. Combat health is opt-in; legacy buildings stay invulnerable.
 
-enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY }
+enum Kind { HEADQUARTERS, BARRACKS, VEHICLE_FACTORY, SUPPLY_DEPOT }
 @export var owner_id: int = 1
 @export var kind: Kind = Kind.BARRACKS
 @export var footprint: Vector2 = Vector2(6, 5)
@@ -36,13 +36,38 @@ func _init() -> void:
 
 
 func display_name() -> String:
+	if kind == Kind.SUPPLY_DEPOT:
+		return "Supply Depot"
 	if kind == Kind.VEHICLE_FACTORY:
 		return "Vehicle Factory"
 	return "Headquarters" if kind == Kind.HEADQUARTERS else "Barracks"
 
 
 func supports_recipe(definition: ProductionDefinition) -> bool:
-	return definition != null and ((kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle"))
+	return definition != null and ((kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle") or (kind == Kind.SUPPLY_DEPOT and definition.identifier == &"collector_truck"))
+
+
+func is_drop_off() -> bool:
+	# Capability only: the harvesting authority also checks operational state,
+	# ownership, field membership, lifetime and valid interaction access.
+	return kind in [Kind.HEADQUARTERS, Kind.SUPPLY_DEPOT]
+
+
+func deposit_access_positions() -> Array[Dictionary]:
+	return depot_access_layout(global_position, footprint, get_instance_id())
+
+
+static func depot_access_layout(origin: Vector3, size: Vector2, identity: int = 0) -> Array[Dictionary]:
+	var positions: Array[Dictionary] = []
+	# Six delivery bays on the other three faces keep the east production exit
+	# separate. Every point and docking face derives from the solid footprint.
+	for axis in [Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:
+		var side := Vector3(-axis.z, 0, axis.x)
+		var extent := size.x / 2.0 if axis.x != 0 else size.y / 2.0
+		for offset in [-1.0, 1.0]:
+			var dock: Vector3 = origin + axis * (extent + 0.1) + side * offset
+			positions.append({"point": dock + axis * 1.2, "dock": dock, "slot": positions.size(), "target": identity})
+	return positions
 
 
 func _ready() -> void:
@@ -63,6 +88,12 @@ func _ready() -> void:
 		_mesh(Vector3(0.025, 2.0, 3.2), Vector3(footprint.x / 2.0 + 0.01, 1, 0), Color("263c49"))
 		for z in [-1.5, 1.5]:
 			_mesh(Vector3(footprint.x - 0.8, 0.35, 0.35), Vector3(0, building_height + 0.2, z), Color("e8b86c"))
+	elif kind == Kind.SUPPLY_DEPOT:
+		# Low warehouse with three gold cargo stacks and a mint loading face.
+		# All decorative solids stay inside the authoritative X/Z footprint.
+		for x in [-1.7, 0.0, 1.7]:
+			_mesh(Vector3(1.2, 0.6, 1.5), Vector3(x, building_height + 0.4, 0), Color("dfbc70"))
+		_mesh(Vector3(footprint.x - 0.8, 0.22, 0.04), Vector3(0, 1.0, -footprint.y / 2.0 + 0.02), Color("86ffcb"))
 	var label := Label3D.new()
 	_identity_label = label
 	label.text = "%s · %d" % [display_name(), owner_id]
