@@ -584,6 +584,26 @@ func _builder_ui() -> void:
 	var preview_order := actor.order_version
 	await _click(_minimap_point(Vector3(-10, 0, 6)), MOUSE_BUTTON_RIGHT)
 	_check(not builders.placement.active and builders.construction.sites.is_empty() and builders.credits.balance(1) == balance and actor.order_version == preview_order, "right-click preview cancellation over minimap spends nothing and leaks no builder Move")
+	# Return through ordinary unit clicks and group keys after builder placement.
+	# Group capability stays mobile-unit based; Q keeps its combat-only boundary.
+	var army: Array[RTSUnit] = [builders.units[0], builders.units[1]]
+	for unit in army:
+		await _hud_pick_unit(unit, unit != army[0])
+	_check(builders.selection.selected_units() == army and builders.selection._pending_picks.is_empty(), "builder preview cancellation allows exact army viewport selection with no pending pick")
+	await _hud_key(KEY_3, true)
+	_check(builders.control_groups.group_members(3) == army, "Ctrl+3 stores army after builder-to-army transition")
+	await _hud_pick_unit(actor)
+	await _click(panel.depot_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
+	await _hud_key(KEY_F1)
+	await _hud_key(KEY_ESCAPE)
+	_check(not builders.help_panel.is_open() and builders.placement.active, "first Escape closes Help and preserves builder preview")
+	await _hud_key(KEY_ESCAPE)
+	await _hud_key(KEY_3)
+	_check(not builders.placement.active and not builders.selection.placement_active and builders.selection.selected_units() == army and builders.control_groups.group_members(3) == army and army.all(func(unit: RTSUnit) -> bool: return unit.selection_indicator.visible) and not actor.selection_indicator.visible and not panel.depot_button.visible, "second Escape cancels preview and 3 restores visible army without builder context")
+	await _hud_key(KEY_Q)
+	_check(builders.selection.attack_move_targeting, "recalled army Q works after Help and builder placement cancellation")
+	await _hud_key(KEY_ESCAPE)
+	await _hud_pick_unit(actor)
 	await _click(panel.depot_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	_motion(_world_screen(DEPOT_POINT))
 	await _frames(8)

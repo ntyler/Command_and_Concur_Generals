@@ -20,7 +20,7 @@ func _run() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--attack-move-ui-case="):
 			chosen = argument.trim_prefix("--attack-move-ui-case=")
-	var cases := ["input", "context", "lifecycle", "integration"]
+	var cases := ["input", "context", "lifecycle", "integration", "groups"]
 	_check(chosen == "all" or cases.has(chosen), "recognized attack-move UI case")
 	for case in cases:
 		if chosen != "all" and chosen != case: continue
@@ -31,6 +31,7 @@ func _run() -> void:
 			"context": await _am_ui_context()
 			"lifecycle": await _am_ui_lifecycle()
 			"integration": await _am_ui_integration()
+			"groups": await _am_ui_groups()
 		print("ATTACK_MOVE_UI_CASE: %s; checks=%d failures=%d" % [case, checks - before, failures - failed])
 	if is_instance_valid(battle): battle.queue_free()
 	await _frames(5)
@@ -297,14 +298,20 @@ func _am_ui_integration() -> void:
 	var group: Array[RTSUnit] = army.duplicate()
 	group.append_array(escorts)
 	if not await _until(func() -> bool: return group.all(func(unit: Variant) -> bool: return is_instance_valid(unit) and not unit.moving and unit.movement_state == RTSUnit.MovementState.ARRIVED), 30, "produced Rifle/Rocket and existing escorts reach staging through actual movement"): return
+	var clicked: Array[RTSUnit] = []
 	for unit in group:
 		battle.camera_rig.center_on_ground(unit.position)
 		await _frames(2)
 		await _am_ui_select(unit, unit != army[0])
+		clicked.append(unit)
+		if not _am_ui_group_check(battle.selection.selected_units() == clicked, "viewport click retains exact accumulated IDs through #%d" % unit.unit_id, "click shift=%s" % (unit != army[0]), clicked): return
+	if not _am_ui_group_check(battle.selection.selected_units() == group and group.all(func(unit: RTSUnit) -> bool: return TeamRules.is_controlled(battle, unit, 1) and unit.is_alive()) and battle.selection._pending_picks.is_empty(), "viewport additive selection retains every living owned produced unit and escort before group assignment", "before Ctrl+3", group): return
 	await _tactical_key(3, true)
+	if not _am_ui_group_check(_am_ui_stored_group_ids(3) == group.map(func(unit: RTSUnit) -> int: return unit.unit_id) and battle.control_groups.group_members(3) == group, "viewport Ctrl+3 stores the exact selected produced army before changing context", "after Ctrl+3 down/up (ctrl=true)", group): return
 	battle.selection.select_building(factory)
 	await _tactical_key(3)
-	_check(battle.selection.selected_units() == group and battle.control_groups.group_members(3) == group, "normal viewport group assignment and recall selects both produced types with existing Rifle escorts")
+	if not _am_ui_group_check(battle.selection.selected_units() == group and battle.control_groups.group_members(3) == group, "normal viewport group assignment and recall selects both produced types with existing Rifle escorts", "after 3 down/up (ctrl=false)", group): return
+	if not _am_ui_group_check(_am_ui_visible_selection(group) and battle.selection.selected_building() == null and battle.production_panel.identity_label.text == "5 units selected", "recalled army has exact visible selection indicators and group HUD", "after 3 visible selection", group): return
 	var damage := {"rifle": 0.0, "rocket": 0.0, "deaths": 0, "resumed": false}
 	for hostile in battle.units:
 		if hostile.owner_id != 2: continue
@@ -316,6 +323,14 @@ func _am_ui_integration() -> void:
 	await _click(_minimap_point(Vector3(24, 0, 8)), MOUSE_BUTTON_LEFT)
 	var result := battle.last_command_result
 	_check(_complete(result) and result.accepted_ids.size() == group.size() and result.assignments.size() == group.size(), "produced group with escorts confirms accurate attack-move through minimap")
+	# Preserve the command failure and its state instead of obscuring it with
+	# dictionary errors in the dependent combat/arrival witnesses below.
+	var complete_slots := group.all(func(unit: RTSUnit) -> bool: return result.accepted_ids.has(unit.unit_id) and result.assignments.has(unit.unit_id))
+	_check(complete_slots, "confirmed attack-move supplies an accepted final slot for every expected army member")
+	if not complete_slots:
+		_am_ui_group_state("missing_command_slots", group)
+		print("ATTACK_MOVE_UI_MISSING_SLOTS: accepted=%s assignments=%s" % [result.accepted_ids, result.assignments])
+		return
 	var slots := result.assignments.duplicate()
 	var produced_travel: Dictionary[int, Dictionary] = {}
 	for unit in army:
@@ -364,3 +379,107 @@ func _am_ui_integration() -> void:
 	await _am_ui_rebind_restart()
 	_check(not battle.selection.attack_move_targeting and battle.control_groups.group_members(3).is_empty(), "integrated Restart clears pending input and produced group membership")
 	print("ATTACK_MOVE_INTEGRATION: damage=%s produced_travel=%s final_slots=%s" % [damage, produced_travel, slots])
+
+
+func _am_ui_group_check(condition: bool, description: String, operation: String, expected: Array[RTSUnit]) -> bool:
+	_check(condition, description)
+	if not condition: _am_ui_group_state(operation, expected)
+	return condition
+
+
+func _am_ui_stored_group_ids(index: int) -> Array:
+	# Read storage separately from eligibility filtering; stale IDs are not recall.
+	var ids: Array = []
+	for identity in battle.control_groups._groups.get(index, []):
+		ids.append(battle.control_groups._members.get(identity, {}).get("unit_id", -1))
+	return ids
+
+
+func _am_ui_visible_selection(expected: Array[RTSUnit]) -> bool:
+	return battle.units.all(func(unit: RTSUnit) -> bool: return unit.selection_indicator.visible == expected.has(unit))
+
+
+func _am_ui_group_state(operation: String, expected: Array[RTSUnit]) -> void:
+	# Failure-only snapshot, not a frame recorder. Read raw selection and stored
+	# IDs before querying normal filtered membership.
+	var focus := root.gui_get_focus_owner()
+	print("ATTACK_MOVE_UI_GROUP_STATE: %s" % {
+		"operation": operation,
+		"group": 3,
+		"expected": expected.map(func(unit: RTSUnit) -> int: return unit.unit_id if is_instance_valid(unit) else -1),
+		"selected": battle.selection._selected.map(func(unit: RTSUnit) -> int: return unit.unit_id if is_instance_valid(unit) else -1),
+		"stored": _am_ui_stored_group_ids(3),
+		"eligible_members": battle.control_groups.group_members(3).map(func(unit: RTSUnit) -> int: return unit.unit_id),
+		"units": expected.map(func(unit: RTSUnit) -> Dictionary: return {"id": unit.unit_id, "owner": unit.owner_id, "alive": unit.is_alive(), "in_field": battle.contains_unit(unit), "controlled": TeamRules.is_controlled(battle, unit, 1), "attack_move": battle.can_attack_move(unit), "visible_selected": unit.selection_indicator.visible} if is_instance_valid(unit) else {"freed": true}),
+		"input_modifiers": {"ctrl": Input.is_key_pressed(KEY_CTRL), "shift": Input.is_key_pressed(KEY_SHIFT), "alt": Input.is_key_pressed(KEY_ALT), "meta": Input.is_key_pressed(KEY_META)},
+		"building": battle.selection.selected_building(),
+		"group_enabled": battle.control_groups._enabled(),
+		"group_focused": battle.control_groups._focused,
+		"selection_focused": battle.selection._focused,
+		"window_focused": root.has_focus(),
+		"gui_focus": str(focus.get_path()) if focus != null else "none",
+		"modal": root.get_exclusive_child() != null,
+		"help": battle.help_panel.is_open(),
+		"placement": battle.selection.placement_active,
+		"targeting": battle.selection.attack_move_targeting,
+		"pending_picks": battle.selection._pending_picks.duplicate(),
+		"panel": battle.production_panel.identity_label.text,
+		"attack_button_visible": battle.production_panel.attack_move_button.visible,
+	})
+
+
+func _am_ui_groups() -> void:
+	# This compatibility case follows the original four UI sequences.
+	await _fresh_combined(1000, 600)
+	var rifle := battle.units[0]
+	var collector := battle.collectors[0]
+	var mixed: Array[RTSUnit] = [collector, rifle]
+	for unit in mixed:
+		battle.camera_rig.center_on_ground(unit.position)
+		await _frames(2)
+		await _am_ui_select(unit, unit != collector)
+	if not _am_ui_group_check(battle.selection.selected_units() == mixed, "viewport selects owned Collector and Rifle as a mixed mobile group", "mixed selection", mixed): return
+	# Explicit modifier events supplement the original per-event Ctrl flag.
+	# These are viewport events, not native OS keystrokes.
+	_am_ui_key_event(KEY_CTRL, true, true)
+	_am_ui_key_event(KEY_3, true, true)
+	var assigned := _am_ui_group_check(battle.control_groups.group_members(3) == mixed and _am_ui_stored_group_ids(3) == [collector.unit_id, rifle.unit_id], "Ctrl+3 press stores Collector and Rifle before either key release", "Ctrl down, 3 down", mixed)
+	_am_ui_key_event(KEY_3, false, true)
+	_am_ui_key_event(KEY_CTRL, false, false)
+	if not assigned: return
+	await _click(_world_screen(battle.headquarters.global_position + Vector3.UP), MOUSE_BUTTON_LEFT)
+	_check(battle.selection.selected_building() == battle.headquarters, "ordinary HQ click changes context after modifier release")
+	var revision := battle.control_groups._revision
+	_am_ui_key_event(KEY_3, false, false)
+	_check(battle.control_groups._revision == revision and battle.selection.selected_building() == battle.headquarters, "released number never recalls or reassigns stored group")
+	await _tactical_key(3)
+	if not _am_ui_group_check(battle.selection.selected_units() == mixed and battle.control_groups.group_members(3) == mixed and _am_ui_visible_selection(mixed), "unmodified 3 restores exact mixed membership and visible selection after Ctrl release", "3 down/up after Ctrl up", mixed): return
+	var sink := AttackKeySink.new()
+	sink.focus_mode = Control.FOCUS_ALL
+	sink.size = Vector2(30, 30)
+	battle.get_node("ControlsFeedback").add_child(sink)
+	sink.grab_focus()
+	revision = battle.control_groups._revision
+	await _tactical_key(3, true)
+	await _tactical_key(3)
+	await _am_ui_key(KEY_Q)
+	_check(sink.presses == 3 and battle.control_groups._revision == revision and battle.selection.selected_units() == mixed and not battle.selection.attack_move_targeting, "focused control consumes assignment, recall and Q without leaking gameplay input")
+	sink.release_focus()
+	sink.queue_free()
+	await _frames(2)
+	var collector_order := collector.order_version
+	await _am_ui_key(KEY_Q)
+	_check(battle.selection.attack_move_targeting, "Q accepts combat member of recalled Collector/Rifle group after GUI focus release")
+	await _click(_minimap_point(Vector3(-8, 0, 14)), MOUSE_BUTTON_LEFT)
+	_check(battle.last_command_result.accepted_ids == [rifle.unit_id] and rifle.attack_move.active and collector.attack_move == null and collector.order_version == collector_order and battle.control_groups.group_members(3) == mixed, "mixed-group Attack Move filters Collector while retaining its control-group membership and order")
+	await _am_ui_key(KEY_X)
+	_check(not rifle.attack_move.active and not rifle.moving and not collector.moving and _am_ui_visible_selection(mixed), "X Stop reaches recalled mobile group and preserves visible selection")
+
+
+func _am_ui_key_event(code: Key, pressed: bool, control: bool) -> void:
+	var key := InputEventKey.new()
+	key.keycode = code
+	key.physical_keycode = code
+	key.pressed = pressed
+	key.ctrl_pressed = control
+	root.push_input(key, true)
