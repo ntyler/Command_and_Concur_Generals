@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/supply_depot_assault.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/builder_assault_field.gd" id="2"]
+
+[node name="BuilderAssault" instance=ExtResource("1")]
+script = ExtResource("2")
+builder_construction_enabled = true
+restart_scene = "res://scenes/builder_assault.tscn"

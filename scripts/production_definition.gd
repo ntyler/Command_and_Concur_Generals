@@ -29,7 +29,11 @@ func is_valid() -> bool:
 		var collecting: bool = identifier == &"collector_truck" and collector != null
 		if collecting:
 			collecting = unit.combat_weapon == null and unit.damageable and unit.maximum_health == 150.0 and unit.movement_speed == 4.0 and not unit.retaliation_enabled and collector.cargo_capacity == 100 and collector.loading_amount == 25 and collector.loading_interval == 1.0 and collector.unloading_duration == 1.0 and collector.interaction_distance == 0.3
-		valid = (((rifle or rocket) and unit.movement_speed == 5.0) or collecting) and unit.scale == Vector3.ONE
+		var builder: Variant = unit if unit.get_script() == load("res://scripts/bulldozer.gd") else null
+		var building: bool = identifier == &"bulldozer" and builder != null
+		if building:
+			building = unit.combat_weapon == null and unit.damageable and unit.maximum_health == 200.0 and unit.movement_speed == 3.5 and not unit.retaliation_enabled and builder.work_tolerance == 0.3 and builder.assigned_site_id == 0
+		valid = (((rifle or rocket) and unit.movement_speed == 5.0) or collecting or building) and unit.scale == Vector3.ONE
 	instance.free()
 	return valid
 

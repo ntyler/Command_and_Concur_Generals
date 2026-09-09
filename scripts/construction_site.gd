@@ -2,7 +2,7 @@ class_name ConstructionSite
 extends RefCounted
 ## Instance state only, separate from both shared definitions and live nodes.
 
-enum State { PREPARING, CONSTRUCTING, OPERATIONAL, FAILED, CANCELLING, CANCELLED }
+enum State { PREPARING, CONSTRUCTING, OPERATIONAL, FAILED, CANCELLING, CANCELLED, TRAVELLING, PAUSED }
 var site_id: int
 var owner_id: int
 var paid: int
@@ -15,6 +15,15 @@ var nav_generation: int = 0
 var refunded: bool = false
 var reason: String = "Preparing navigation"
 var body_ref: WeakRef
+var builder_required: bool = false
+var builder_ref: WeakRef
+var work_access: Dictionary = {}
+var work_order_version: int = -1
+var assignment_generation: int = 0
+
+
+func builder() -> Bulldozer:
+	return builder_ref.get_ref() as Bulldozer if builder_ref != null else null
 
 
 func building() -> RTSBuilding:
@@ -22,7 +31,7 @@ func building() -> RTSBuilding:
 
 
 func cancellable() -> bool:
-	return state in [State.PREPARING, State.CONSTRUCTING, State.FAILED]
+	return state in [State.PREPARING, State.CONSTRUCTING, State.FAILED, State.TRAVELLING, State.PAUSED]
 
 
 func progress() -> float:

@@ -131,6 +131,31 @@ func selected_units() -> Array[RTSUnit]:
 	return _selected.duplicate()
 
 
+func selected_builder() -> Bulldozer:
+	# Construction never chooses a random builder from a mixed/control-group
+	# selection. TeamRules supplies the same live ownership/registration boundary
+	# used by ordinary selection and movement commands.
+	if _selected.size() != 1 or not is_instance_valid(_selected[0]) or not _selected[0] is Bulldozer or not _can_select(_selected[0]):
+		return null
+	return _selected[0] as Bulldozer
+
+
+func has_selected_builder() -> bool:
+	for unit in _selected:
+		if is_instance_valid(unit) and unit is Bulldozer and _can_select(unit):
+			return true
+	return false
+
+
+func request_builder_assignment(building: RTSBuilding) -> bool:
+	var world := gameplay_field as ConstructionField
+	var builder := selected_builder()
+	if world == null or not world.builder_construction_enabled or builder == null or not is_instance_valid(building) or not building is ConstructionBuilding or not world.contains_building(building) or building.owner_id != friendly_owner_id:
+		return false
+	var site := (building as ConstructionBuilding).site
+	return site != null and world.construction.assign_builder(builder, site.site_id)
+
+
 func replace_units(candidates: Array) -> void:
 	# Commit all membership before notifying listeners. Callers such as control
 	# groups share the normal ownership checks and never build parallel selection.
@@ -266,7 +291,11 @@ func _physics_process(_delta: float) -> void:
 					harvest_requested.emit(hit["collider"] as SupplyCache)
 				elif hit["collider"] is RTSBuilding:
 					var building := hit["collider"] as RTSBuilding
-					if TeamRules.is_hostile_target(gameplay_field, friendly_owner_id, building):
+					if gameplay_field is ConstructionField and (gameplay_field as ConstructionField).builder_construction_enabled and has_selected_builder() and building is ConstructionBuilding and building.owner_id == friendly_owner_id and not building.operational:
+						# A rejected resume preserves current work and never falls
+						# through to Move, deposit, attack, or another builder's job.
+						request_builder_assignment(building)
+					elif TeamRules.is_hostile_target(gameplay_field, friendly_owner_id, building):
 						attack_requested.emit(building)
 					else:
 						deposit_requested.emit(building)

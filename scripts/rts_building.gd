@@ -44,7 +44,7 @@ func display_name() -> String:
 
 
 func supports_recipe(definition: ProductionDefinition) -> bool:
-	return definition != null and ((kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle") or (kind == Kind.SUPPLY_DEPOT and definition.identifier == &"collector_truck"))
+	return definition != null and ((kind == Kind.HEADQUARTERS and definition.identifier == &"bulldozer") or (kind == Kind.BARRACKS and definition.identifier == &"rifle") or (kind == Kind.VEHICLE_FACTORY and definition.identifier == &"rocket_vehicle") or (kind == Kind.SUPPLY_DEPOT and definition.identifier == &"collector_truck"))
 
 
 func is_drop_off() -> bool:

@@ -4,10 +4,12 @@ extends HarvestField
 
 const BUILD_AREA := Rect2(-27, -21, 54, 43)
 const ACCESS_CORRIDORS: Array[Rect2] = [Rect2(-16.7, -13.3, 28, 2), Rect2(-17, -13.3, 3, 9), Rect2(-27, 10, 25, 2)]
-@export var construction_definition: ConstructionDefinition = preload("res://construction/barracks.tres")
+@export var construction_definition: ConstructionDefinition = load("res://construction/barracks.tres")
 @export var vehicle_factory_definition: ConstructionDefinition
 @export var supply_depot_definition: ConstructionDefinition
 @export var navigation_timeout: float = 5.0
+@export var builder_construction_enabled: bool = false
+@export_range(0.85, 2.0, 0.05) var builder_work_distance: float = 1.3
 var construction: BuildingConstruction
 var placement: BuildingPlacement
 var static_footprints: Array[Rect2] = []
@@ -100,6 +102,63 @@ func find_spawn(building: RTSBuilding, body: CapsuleShape3D = null) -> PackedVec
 
 func supports_construction(definition: ConstructionDefinition) -> bool:
 	return definition != null and (definition == construction_definition or definition == vehicle_factory_definition or definition == supply_depot_definition)
+
+
+func builder_work_positions(rectangle: Rect2) -> Array[Dictionary]:
+	var positions: Array[Dictionary] = []
+	var center := Vector3(rectangle.get_center().x, 0, rectangle.get_center().y)
+	for axis in [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:
+		var side := Vector3(-axis.z, 0, axis.x)
+		var extent := rectangle.size.x / 2.0 if axis.x != 0 else rectangle.size.y / 2.0
+		for offset in [-1.0, 1.0]:
+			var dock: Vector3 = center + axis * (extent + 0.1) + side * offset
+			positions.append({"point": dock + axis * (builder_work_distance - 0.1), "dock": dock, "slot": positions.size()})
+	return positions
+
+
+func plan_builder_access(builder: Bulldozer, rectangle: Rect2) -> Dictionary:
+	if not Engine.is_in_physics_frame() or not construction.eligible_builder(builder, builder.owner_id) or construction.navigation.blocked:
+		return {}
+	var best: Dictionary = {}
+	var shortest := INF
+	# The same eight bounded access/physics checks used by harvesting; commands
+	# and synchronized site preparation are the only path-search boundaries.
+	for candidate in builder_work_positions(rectangle):
+		var point: Vector3 = candidate["point"]
+		if not valid_rally(builder.global_position, point) or not _clear_access(builder, candidate):
+			continue
+		var path := NavigationServer3D.map_get_path(get_world_3d().get_navigation_map(), builder.global_position, point, true)
+		var length := builder.global_position.distance_to(path[0])
+		for index in range(1, path.size()):
+			length += path[index - 1].distance_to(path[index])
+		if length < shortest - 0.001:
+			best = candidate
+			shortest = length
+	return best
+
+
+func builder_can_work(builder: Bulldozer, site: ConstructionSite) -> bool:
+	if not Engine.is_in_physics_frame() or construction.navigation.blocked or not construction.eligible_builder(builder, site.owner_id) or site.builder() != builder or builder.assigned_site_id != site.site_id or site.work_access.is_empty():
+		return false
+	var body := site.building()
+	if not is_instance_valid(body) or not contains_building(body) or body.owner_id != site.owner_id or body.operational:
+		return false
+	var center := Vector3(site.rectangle.get_center().x, 0, site.rectangle.get_center().y)
+	if body.global_position.distance_to(center) > 0.02:
+		return false
+	var access := site.work_access
+	var point: Vector3 = access["point"]
+	var slot := int(access["slot"])
+	var positions := builder_work_positions(site.rectangle)
+	if slot < 0 or slot >= positions.size() or (positions[slot]["point"] as Vector3).distance_to(point) > 0.02 or (positions[slot]["dock"] as Vector3).distance_to(access["dock"]) > 0.02:
+		return false
+	if builder.navigation_suspended or builder.moving or builder.movement_state != RTSUnit.MovementState.ARRIVED or builder.order_version != site.work_order_version or builder.global_position.distance_to(point) > builder.work_tolerance or not _nav_point(builder.global_position) or not _nav_point(point):
+		return false
+	if not _clear_access(builder, access):
+		return false
+	# Arrival must also clear the capsule at its actual position, including any
+	# standing offset, and the final interaction segment to the outside face.
+	return _clear_access(builder, {"point": builder.global_position, "dock": access["dock"]})
 
 
 func protected_areas() -> Array[Rect2]:

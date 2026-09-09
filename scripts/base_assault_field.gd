@@ -169,6 +169,7 @@ func resolve_result() -> void:
 	result = Result.DRAW if own_lost and enemy_lost else (Result.DEFEAT if own_lost else Result.VICTORY)
 	gameplay_enabled = false
 	credits.active = false
+	construction.pause_all()
 	placement.cancel()
 	selection.cancel_gesture()
 	selection.cancel_attack_move_targeting()

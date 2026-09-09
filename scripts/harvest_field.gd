@@ -227,7 +227,7 @@ func plan_access(unit: CollectorTruck, target: Node3D) -> Dictionary:
 	return best
 
 
-func _clear_access(unit: CollectorTruck, access: Dictionary) -> bool:
+func _clear_access(unit: RTSUnit, access: Dictionary) -> bool:
 	# A valid nav projection alone cannot prove capsule or interaction clearance.
 	var point: Vector3 = access["point"]
 	_access_query.exclude = [unit.get_rid()]

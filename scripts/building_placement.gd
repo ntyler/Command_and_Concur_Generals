@@ -11,7 +11,7 @@ var point := Vector3.ZERO
 var valid: bool = false
 var last_result: ConstructionResult
 var definition: ConstructionDefinition
-var _headquarters: WeakRef
+var _source: WeakRef
 var _owner: int = 0
 var _pointer := Vector2.ZERO
 var _pending: Array[Vector2] = []
@@ -44,17 +44,19 @@ func _ready() -> void:
 	status.hide()
 
 
-func begin(headquarters: Variant, choice: ConstructionDefinition = null) -> bool:
+func begin(source: Variant, choice: ConstructionDefinition = null) -> bool:
 	var owner := field.selection.friendly_owner_id
 	var requested := choice if choice != null else field.construction_definition
-	reason = field.construction.can_begin(owner, headquarters, requested)
+	reason = field.construction.can_begin(owner, source, requested)
 	if not reason.is_empty():
 		return false
 	definition = requested
 	(preview.mesh as BoxMesh).size = Vector3(definition.footprint.x, definition.height, definition.footprint.y)
 	_generation += 1
 	_owner = owner
-	_headquarters = weakref(headquarters)
+	# A preview has no gameplay side effects. The manager replaces the source's
+	# earlier order only after authoritative placement has committed successfully.
+	_source = weakref(source)
 	active = true
 	valid = false
 	_pending.clear()
@@ -82,6 +84,12 @@ func cancel() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# Preview cancellation owns right-click before pointer-only HUD surfaces
+	# (including the minimap) can consume it. Escape still gives Help first refusal.
+	if active and field.builder_construction_enabled and event is InputEventMouseButton and event.is_action_pressed("placement_cancel"):
+		cancel()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion:
 		_pointer = event.position
 
@@ -102,7 +110,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not active:
 		return
-	var headquarters := _headquarters.get_ref() as RTSBuilding
+	var source := _source.get_ref() as Node3D if _source != null else null
 	var version := _generation
 	# Snapshot inputs: listener callbacks may cancel or start a new placement.
 	var requests := _pending.duplicate()
@@ -113,7 +121,7 @@ func _physics_process(delta: float) -> void:
 			reason = "Point at flat ground inside the green boundary"
 			continue
 		var manager := field.construction
-		var result := manager.place(_owner, headquarters, definition, hit["position"])
+		var result := manager.place(_owner, source, definition, hit["position"])
 		if not is_instance_valid(self) or not is_instance_valid(field):
 			return
 		last_result = result
@@ -123,7 +131,9 @@ func _physics_process(delta: float) -> void:
 		if last_result.accepted:
 			var site := manager.sites.get(last_result.site_id) as ConstructionSite
 			cancel()
-			if site != null and is_instance_valid(site.building()) and field.contains_building(site.building()) and field.selection.selected_building() == headquarters:
+			# Legacy HQ placement selects its new site. Builder placement keeps the
+			# builder selected so its travel/work state and X Stop remain contextual.
+			if is_instance_valid(source) and source is RTSBuilding and site != null and is_instance_valid(site.building()) and field.contains_building(site.building()) and field.selection.selected_building() == source:
 				field.selection.select_building(site.building())
 			return
 	_cooldown -= delta
@@ -138,7 +148,7 @@ func _physics_process(delta: float) -> void:
 		preview.position = point + Vector3.UP * definition.height / 2.0
 	if _cooldown <= 0.0:
 		_cooldown = 0.1
-		reason = field.construction.validate(_owner, headquarters, definition, point) if not hit.is_empty() else "Point at flat ground inside the green boundary"
+		reason = field.construction.validate(_owner, source, definition, point) if not hit.is_empty() else "Point at flat ground inside the green boundary"
 		valid = reason.is_empty()
 		_material.albedo_color = Color(0.35, 1, 0.65, 0.35) if valid else Color(1, 0.25, 0.2, 0.4)
 		status.text = ("Valid · %d credits · left click to build" % definition.credit_cost if valid else "Cannot build · " + reason) + "\nRight click / Escape · Cancel placement"

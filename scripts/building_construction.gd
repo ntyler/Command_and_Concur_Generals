@@ -25,9 +25,165 @@ func field() -> ConstructionField:
 	return value if not closed and is_instance_valid(value) and value.is_inside_tree() and value.gameplay_enabled and not value._closing and not value.is_queued_for_deletion() else null
 
 
+func eligible_builder(builder: Variant, requester: int) -> bool:
+	var owner := field()
+	return owner != null and owner.builder_construction_enabled and is_instance_valid(builder) and builder is Bulldozer and builder.owner_id == requester and builder.gameplay_field == owner and owner.contains_unit(builder) and builder.is_alive() and builder.combat_weapon == null and builder.combat != null and builder.combat.weapon == null and is_finite(builder.work_tolerance) and builder.work_tolerance >= builder.stopping_distance and builder.work_tolerance <= 0.5
+
+
+func selected_builder(builder: Variant, requester: int) -> bool:
+	if not eligible_builder(builder, requester) or requester != field().selection.friendly_owner_id:
+		return false
+	var selected := field().selection.selected_units()
+	return selected.size() == 1 and selected[0] == builder
+
+
+func assign_builder(builder: Bulldozer, site_id: int) -> bool:
+	if not is_instance_valid(builder) or not selected_builder(builder, builder.owner_id) or not Engine.is_in_physics_frame():
+		return false
+	var site := sites.get(site_id) as ConstructionSite
+	if site == null or not site.builder_required or not site.cancellable() or site.state == ConstructionSite.State.FAILED or site.owner_id != builder.owner_id:
+		return false
+	var body := site.building()
+	if not is_instance_valid(body) or not field().contains_building(body) or body.owner_id != site.owner_id:
+		return false
+	var occupant := site.builder()
+	if eligible_builder(occupant, site.owner_id) and occupant.assigned_site_id == site_id:
+		return false # Including a duplicate request; it cannot reset recovery.
+	if navigation.blocked and site.state != ConstructionSite.State.PREPARING:
+		return false
+	if not navigation.blocked and field().plan_builder_access(builder, site.rectangle).is_empty():
+		return false # Rejection preserves the builder's previous valid order.
+	_claim(site, builder)
+	if field() != null and site.builder() == builder and builder.assigned_site_id == site_id and site.state != ConstructionSite.State.PREPARING:
+		_dispatch_builder(site)
+	if field() != null:
+		changed.emit(site_id)
+	return true # The accepted claim may already have been replaced by a callback.
+
+
+func _claim(site: ConstructionSite, builder: Bulldozer) -> void:
+	if not eligible_builder(builder, site.owner_id) or not site.cancellable():
+		return
+	var previous := sites.get(builder.assigned_site_id) as ConstructionSite
+	if previous != null and previous != site:
+		_detach(previous, false)
+		_pause_state(previous)
+	site.assignment_generation += 1
+	site.builder_ref = weakref(builder)
+	site.work_access = {}
+	builder.assigned_site_id = site.site_id
+	site.work_order_version = builder.order_version + 1
+	site.reason = "Preparing site" if site.state == ConstructionSite.State.PREPARING else "Builder travelling"
+	# Accepting the paid site replaces the old order now; only final approach waits
+	# for map readiness. Claim state is fully committed before movement listeners.
+	builder.halt_motion()
+
+
+func _pause_state(site: ConstructionSite, reason: String = "Paused — needs builder") -> void:
+	if site.state == ConstructionSite.State.PREPARING:
+		site.reason = "Preparing site · needs builder"
+	elif site.cancellable() and site.state != ConstructionSite.State.FAILED:
+		site.state = ConstructionSite.State.PAUSED
+		site.reason = reason
+
+
+func _detach(site: ConstructionSite, stop_obsolete: bool, clear_unit: bool = true) -> void:
+	var builder := site.builder()
+	site.assignment_generation += 1
+	site.builder_ref = null
+	site.work_access = {}
+	site.work_order_version = -1
+	if clear_unit and is_instance_valid(builder) and builder.assigned_site_id == site.site_id:
+		builder.clear_construction(site.site_id, stop_obsolete)
+
+
+func release_builder(builder: Bulldozer, stop_obsolete: bool = false) -> void:
+	if not is_instance_valid(builder):
+		return
+	var identity := builder.assigned_site_id
+	var site := sites.get(identity) as ConstructionSite
+	if site != null and site.builder() == builder:
+		_pause_state(site)
+		_detach(site, stop_obsolete)
+	else:
+		builder.clear_construction(identity, stop_obsolete)
+	if field() != null and site != null:
+		changed.emit(identity)
+
+
+func _dispatch_builder(site: ConstructionSite) -> void:
+	var builder := site.builder()
+	if field() == null or not site.cancellable():
+		return
+	if not eligible_builder(builder, site.owner_id) or builder.assigned_site_id != site.site_id:
+		site.state = ConstructionSite.State.PAUSED
+		_pause_state(site)
+		_detach(site, true)
+		return
+	var access := field().plan_builder_access(builder, site.rectangle)
+	if access.is_empty():
+		site.state = ConstructionSite.State.PAUSED
+		_pause_state(site, "Paused — no clear reachable work position")
+		_detach(site, true)
+		return
+	site.work_access = access
+	builder.work_point = access["point"]
+	site.state = ConstructionSite.State.TRAVELLING
+	site.reason = "Builder travelling"
+	site.work_order_version = builder.order_version + 1
+	var assignment := site.assignment_generation
+	if not builder.construction_move(access["point"]) and site.assignment_generation == assignment:
+		_pause_state(site, "Paused — approach rejected")
+		_detach(site, true)
+
+
+func _advance_builder(site: ConstructionSite) -> void:
+	if site.builder_ref == null:
+		return
+	var builder := site.builder()
+	if not eligible_builder(builder, site.owner_id) or builder.assigned_site_id != site.site_id or builder.order_version != site.work_order_version or site.building().owner_id != site.owner_id:
+		_pause_state(site)
+		_detach(site, true)
+		return
+	if site.state in [ConstructionSite.State.PREPARING, ConstructionSite.State.FAILED] or navigation.blocked:
+		return
+	if builder.movement_state == RTSUnit.MovementState.FAILED:
+		_pause_state(site, "Paused — builder approach failed")
+		_detach(site, false) # Preserve terminal recovery evidence; next command is fresh.
+		changed.emit(site.site_id)
+		return
+	if field().builder_can_work(builder, site):
+		if site.state != ConstructionSite.State.CONSTRUCTING:
+			site.state = ConstructionSite.State.CONSTRUCTING
+			site.reason = "Constructing"
+			site.started_frame = Engine.get_physics_frames()
+			changed.emit(site.site_id)
+	elif not builder.moving:
+		_pause_state(site, "Paused — builder is out of position or obstructed")
+		_detach(site, true)
+		if field() != null:
+			changed.emit(site.site_id)
+	else:
+		site.state = ConstructionSite.State.TRAVELLING
+		site.reason = "Builder travelling"
+
+
+func pause_all() -> void:
+	# Freeze and teardown use this even after gameplay_enabled becomes false.
+	for site in sites.values():
+		if site.builder_required:
+			_pause_state(site)
+			_detach(site, false)
+
+
 func can_begin(requester: int, headquarters: Variant, definition: ConstructionDefinition) -> String:
 	var owner := field()
-	if owner == null or not is_instance_valid(headquarters) or not headquarters is RTSBuilding or not owner.contains_building(headquarters) or headquarters.kind != RTSBuilding.Kind.HEADQUARTERS or headquarters.owner_id != requester:
+	if owner == null:
+		return "Construction unavailable"
+	if owner.builder_construction_enabled:
+		if not selected_builder(headquarters, requester):
+			return "Select exactly one owned Bulldozer to build"
+	elif not is_instance_valid(headquarters) or not headquarters is RTSBuilding or not owner.contains_building(headquarters) or headquarters.kind != RTSBuilding.Kind.HEADQUARTERS or headquarters.owner_id != requester:
 		return "Select a live owned headquarters"
 	if not owner.supports_construction(definition) or not definition.is_valid():
 		return "Unsupported building definition"
@@ -49,7 +205,12 @@ func validate(requester: int, headquarters: Variant, definition: ConstructionDef
 		return reason
 	if not Engine.is_in_physics_frame():
 		return "Placement requires a physics tick"
-	return field().placement_geometry(point, definition)
+	reason = field().placement_geometry(point, definition)
+	if reason.is_empty() and field().builder_construction_enabled:
+		var rectangle := Rect2(Vector2(point.x, point.z) - definition.footprint / 2.0, definition.footprint)
+		if field().plan_builder_access(headquarters as Bulldozer, rectangle).is_empty():
+			return "No reachable clear builder work position"
+	return reason
 
 
 func place(requester: int, headquarters: Variant, definition: ConstructionDefinition, point: Vector3) -> ConstructionResult:
@@ -58,12 +219,15 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 		return ConstructionResult.reject(reason)
 	var owner := field()
 	var wallet := owner.credits
+	var initial_builder := headquarters as Bulldozer if owner.builder_construction_enabled else null
+	var initial_order := initial_builder.order_version if initial_builder != null else -1
 	var site := ConstructionSite.new()
 	_next_id += 1
 	site.site_id = _next_id
 	site.owner_id = requester
 	site.paid = definition.credit_cost
 	site.duration = definition.duration
+	site.builder_required = owner.builder_construction_enabled
 	site.rectangle = Rect2(Vector2(point.x, point.z) - definition.footprint / 2.0, definition.footprint)
 	if not wallet.spend(requester, site.paid):
 		return ConstructionResult.reject("Insufficient credits")
@@ -90,7 +254,11 @@ func place(requester: int, headquarters: Variant, definition: ConstructionDefini
 		if not is_instance_valid(body) or not owner.contains_building(body):
 			cancel(requester, site.site_id)
 		elif site.state == ConstructionSite.State.PREPARING:
-			site.nav_generation = _request_navigation()
+			if site.builder_required and eligible_builder(initial_builder, requester) and initial_builder.order_version == initial_order and site.builder() == null:
+				_claim(site, initial_builder)
+			# Holding the accepted builder order can synchronously cancel/remove it.
+			if field() != null and site.state == ConstructionSite.State.PREPARING:
+				_request_navigation()
 	# Historical acceptance survives a listener cancelling this committed site.
 	var result := ConstructionResult.accept(site.site_id, site.paid, "%s site accepted" % definition.display_name())
 	wallet.publish(requester)
@@ -121,7 +289,13 @@ func cancel(requester: int, site_id: int) -> ConstructionResult:
 		field()._producers.erase(body_id)
 		producer = body.production
 		body.queue_free()
-	site.nav_generation = _request_navigation()
+	# Detach silently until body, wallet and cleanup generation are committed.
+	var builder := site.builder()
+	var assignment := site.site_id
+	_detach(site, false, false)
+	_request_navigation()
+	if is_instance_valid(builder) and builder.assigned_site_id == assignment:
+		builder.clear_construction(assignment, true)
 	# close() itself publishes producer.changed. It belongs AFTER the complete
 	# cancellation commit; its listeners may immediately free body or field.
 	if producer != null:
@@ -156,11 +330,17 @@ func advance(delta: float) -> void:
 	if field() == null:
 		return
 	var site := sites.get(unfinished_id) as ConstructionSite
-	if site == null or site.state != ConstructionSite.State.CONSTRUCTING or Engine.get_physics_frames() <= site.started_frame:
+	if site == null or not site.cancellable():
 		return
 	var body := site.building()
 	if not is_instance_valid(body) or not field().contains_building(body):
 		cancel(site.owner_id, site.site_id)
+		return
+	if site.builder_required:
+		_advance_builder(site)
+		if field() == null or site.state != ConstructionSite.State.CONSTRUCTING or not field().builder_can_work(site.builder(), site):
+			return
+	if site.state != ConstructionSite.State.CONSTRUCTING or navigation.blocked or Engine.get_physics_frames() <= site.started_frame:
 		return
 	site.elapsed = minf(site.duration, site.elapsed + delta)
 	if site.elapsed < site.duration:
@@ -168,7 +348,7 @@ func advance(delta: float) -> void:
 	# The first transition to OPERATIONAL is the precise completion boundary.
 	# Subsequent cancellation is rejected; no geometry update occurs here.
 	site.state = ConstructionSite.State.OPERATIONAL
-	site.reason = "Operational"
+	site.reason = "Complete" if site.builder_required else "Operational"
 	body.operational = true
 	unfinished_id = 0
 	var rally := body.exit_position() + Vector3.RIGHT * 3.0
@@ -176,7 +356,9 @@ func advance(delta: float) -> void:
 		body.production.has_rally = true
 		body.production.rally_point = rally
 	(body as ConstructionBuilding).refresh_construction()
-	changed.emit(site.site_id)
+	_detach(site, true)
+	if field() != null:
+		changed.emit(site.site_id)
 
 
 func _navigation_ready(generation: int) -> void:
@@ -186,15 +368,19 @@ func _navigation_ready(generation: int) -> void:
 	if site == null or site.nav_generation != generation:
 		return
 	if site.state == ConstructionSite.State.PREPARING:
-		site.state = ConstructionSite.State.CONSTRUCTING
-		site.reason = "Constructing"
-		site.started_frame = Engine.get_physics_frames()
+		if site.builder_required:
+			_dispatch_builder(site)
+		else:
+			site.state = ConstructionSite.State.CONSTRUCTING
+			site.reason = "Constructing"
+			site.started_frame = Engine.get_physics_frames()
 	elif site.state == ConstructionSite.State.CANCELLING:
 		site.state = ConstructionSite.State.CANCELLED
 		site.reason = "Cancelled; terrain restored"
 		sites.erase(site.site_id)
 		unfinished_id = 0
-	changed.emit(site.site_id)
+	if field() != null:
+		changed.emit(site.site_id)
 
 
 func _navigation_failed(generation: int, reason: String) -> void:
@@ -206,9 +392,11 @@ func _navigation_failed(generation: int, reason: String) -> void:
 	if site.state == ConstructionSite.State.PREPARING:
 		site.state = ConstructionSite.State.FAILED
 		site.reason = reason
+		_detach(site, true)
 	else:
 		site.reason = "Cleanup failed; refunded once. Reload this field to reset navigation."
-	changed.emit(site.site_id)
+	if field() != null:
+		changed.emit(site.site_id)
 
 
 func _departed(site_id: int) -> void:
@@ -234,6 +422,7 @@ func _reconcile_departure(site_id: int) -> void:
 
 func close() -> void:
 	closed = true
+	pause_all()
 	navigation.close()
 	if navigation.ready.is_connected(_navigation_ready):
 		navigation.ready.disconnect(_navigation_ready)

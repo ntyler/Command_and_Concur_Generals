@@ -36,15 +36,25 @@ func _ready() -> void:
 	# Keep all 14px instructions above the objective's outer edge at 720p.
 	help_content.add_theme_constant_override("separation", 6)
 	column.add_child(help_content)
-	_label(help_content, "FIELDWORK / SUPPLY DEPOT ASSAULT" if field.supply_depot_definition != null else "FIELDWORK / COMBINED ARMS", Color("a7ecdf"))
+	var scenario := "FIELDWORK / BULLDOZER ASSAULT" if field.builder_construction_enabled else ("FIELDWORK / SUPPLY DEPOT ASSAULT" if field.supply_depot_definition != null else "FIELDWORK / COMBINED ARMS")
+	_label(help_content, scenario, Color("a7ecdf"))
 	_label(help_content, "WASD / arrows / edges · Pan    Wheel · Zoom\nClick / drag · Select units    Shift · Toggle / add\nClick owned building · Select building\nRight-click ground · Move    X · Stop\nRight-click hostile · Attack with combat units")
 	if field.attack_move_enabled:
 		_label(help_content, "Q / Attack Move · Then click ground or minimap\nEngage enemies along the route, then resume travel\nOrdinary Move only travels · Right-click / Esc cancels targeting")
 	var dropoff_hint := "owned HQ / depot" if field.supply_depot_definition != null else "owned HQ"
 	var build_hint := "HQ · Build Barracks / Factory / Supply Depot" if field.supply_depot_definition != null else "HQ · Build Barracks or Vehicle Factory"
-	_label(help_content, "Collectors + right-click supply · Harvest\nLoaded collectors + right-click %s · Deposit\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access" % [dropoff_hint, build_hint])
+	var harvest_hint := "Collectors + right-click supply · Harvest\nLoaded collectors + right-click %s · Deposit" % dropoff_hint
+	if field.builder_construction_enabled:
+		harvest_hint = "Collectors · Right-click supply / HQ / depot · Harvest / deposit"
+		build_hint = "HQ · Train Bulldozers    Depot · Train Collectors\nOne owned Bulldozer · Build Depot / Barracks / Factory\nRight-click unfinished site · Resume    X / Move · Pause"
+	_label(help_content, "%s\n%s\nProducer · Train / Cancel    Right-click ground · Rally\nPlacement · Left-click to build; right-click / Esc to cancel\nGreen boundary · Build area    Gold · Protected access" % [harvest_hint, build_hint])
 	_label(help_content, "Minimap · Left-click to center; right-click to Move\nCtrl + 1–9 · Assign group    1–9 · Recall\nDouble-tap same number · Recall and center\nEsc · Close Help / cancel drag    F3 · Diagnostics")
-	_label(help_content, "Destroy enemy HQ · Protect your HQ\nHarvest → build production → train → attack\nMint · Your team    Coral · Enemy    Walls block fire", Color("ffce78"))
+	# The builder variant keeps the same 22-line total as the validated 720p Help.
+	# Its extra work instructions share the economy/goal space, above the objective.
+	var objective_hint := "Destroy enemy HQ · Protect your HQ\nHarvest → build production → train → attack\nMint · Your team    Coral · Enemy    Walls block fire"
+	if field.builder_construction_enabled:
+		objective_hint = "Destroy enemy HQ · Protect yours · Mint yours / Coral enemy\nDepot → Collector → harvest → army · Walls block fire"
+	_label(help_content, objective_hint, Color("ffce78"))
 	set_open(false)
 
 

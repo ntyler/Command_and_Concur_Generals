@@ -7,6 +7,7 @@ var depot_button: Button
 var site_status: Label
 var site_progress: ProgressBar
 var cancel_site_button: Button
+var _displayed_site: ConstructionSite
 
 
 func _ready() -> void:
@@ -55,46 +56,66 @@ func refresh_construction() -> void:
 		return
 	var world := field as ConstructionField
 	var building := field.selection.selected_building()
-	build_button.visible = building != null and building.kind == RTSBuilding.Kind.HEADQUARTERS
+	var builder := field.selection.selected_builder() if world.builder_construction_enabled else null
+	var source: Node3D = builder if world.builder_construction_enabled else building
+	build_button.visible = builder != null if world.builder_construction_enabled else building != null and building.kind == RTSBuilding.Kind.HEADQUARTERS
 	build_button.text = "Build Barracks · %d cr · %s s" % [world.construction_definition.credit_cost, str(world.construction_definition.duration)]
 	var factory := world.vehicle_factory_definition
 	factory_button.visible = build_button.visible and factory != null
 	if factory != null:
 		factory_button.text = "Build Vehicle Factory · %d cr · %s s" % [factory.credit_cost, str(factory.duration)]
-		factory_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, building, factory).is_empty()
+		factory_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, factory).is_empty()
 	var depot := world.supply_depot_definition
 	depot_button.visible = build_button.visible and depot != null
 	if depot != null:
 		depot_button.text = "Build Supply Depot · %d cr · %s s" % [depot.credit_cost, str(depot.duration)]
-		depot_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, building, depot).is_empty()
+		depot_button.disabled = not world.construction.can_begin(field.selection.friendly_owner_id, source, depot).is_empty()
 	if build_button.visible:
-		var reason := world.construction.can_begin(field.selection.friendly_owner_id, building, world.construction_definition)
+		var reason := world.construction.can_begin(field.selection.friendly_owner_id, source, world.construction_definition)
 		build_button.disabled = not reason.is_empty()
 		var any_available := not build_button.disabled or (factory_button.visible and not factory_button.disabled) or (depot_button.visible and not depot_button.disabled)
-		feedback.text = "Choose a building, then place it." if any_available else reason
-	var site := (building as ConstructionBuilding).site if building is ConstructionBuilding else null
+		var hint := "Choose a building, then place it." if any_available else reason
+		if builder != null:
+			feedback.text = "Right-click ground · Move    X · Stop\n" + hint + "\nRight-click owned unfinished site · Resume"
+		else:
+			feedback.text = hint
+	elif world.builder_construction_enabled and field.selection.has_selected_builder():
+		feedback.text = ("" if field.selection.attack_move_targeting else _commands(field.selection.selected_units()) + "\n") + "Select exactly one owned Bulldozer to place or resume construction."
+	feedback.visible = not feedback.text.is_empty()
+	var site: ConstructionSite = (building as ConstructionBuilding).site if building is ConstructionBuilding else null
+	if builder != null and builder.assigned_site_id != 0:
+		site = world.construction.sites.get(builder.assigned_site_id) as ConstructionSite
+		# Ordinary movement becomes idle at arrival; construction has its own
+		# current activity below, so do not label a working builder "Idle".
+		selection_details.text = _health_text(builder.combat.health)
+	_displayed_site = site
 	var unfinished := site != null and site.state != ConstructionSite.State.OPERATIONAL
-	site_status.visible = unfinished
+	site_status.visible = unfinished or builder != null
 	site_progress.visible = unfinished
-	cancel_site_button.visible = unfinished
+	# Cancelling the selected site refunds it. Builder X Stop instead pauses it;
+	# keeping that distinction in the contextual UI avoids accidental refunds.
+	cancel_site_button.visible = unfinished and building is ConstructionBuilding
 	if unfinished:
 		train_button.hide()
 		progress_bar.hide()
 		rows.hide()
-		feedback.text = "Paid %d credits · refundable until completion" % site.paid
+		if builder == null:
+			feedback.text = "Paid %d credits · refundable until completion" % site.paid
 		site_status.text = site.reason
+		site_progress.value = site.progress() * 100.0
 		cancel_site_button.disabled = not site.cancellable()
 	else:
 		rows.show()
+		if builder != null:
+			site_status.text = "No construction assignment"
 	_layout.call_deferred()
 
 
 func _process(delta: float) -> void:
 	super._process(delta)
 	if is_instance_valid(site_progress) and site_progress.visible:
-		var building := field.selection.selected_building() as ConstructionBuilding
-		if building != null:
-			site_progress.value = building.site.progress() * 100.0
+		if _displayed_site != null:
+			site_progress.value = _displayed_site.progress() * 100.0
 
 
 func _construction_changed(_site_id: int) -> void:
@@ -106,7 +127,7 @@ func _begin() -> void:
 		return
 	var world := field as ConstructionField
 	if is_instance_valid(world.placement):
-		world.placement.begin(field.selection.selected_building())
+		world.placement.begin(_placement_source())
 
 
 func _begin_factory() -> void:
@@ -114,7 +135,7 @@ func _begin_factory() -> void:
 		return
 	var world := field as ConstructionField
 	if world.vehicle_factory_definition != null and is_instance_valid(world.placement):
-		world.placement.begin(field.selection.selected_building(), world.vehicle_factory_definition)
+		world.placement.begin(_placement_source(), world.vehicle_factory_definition)
 
 
 func _begin_depot() -> void:
@@ -122,7 +143,11 @@ func _begin_depot() -> void:
 		return
 	var world := field as ConstructionField
 	if world.supply_depot_definition != null and is_instance_valid(world.placement):
-		world.placement.begin(field.selection.selected_building(), world.supply_depot_definition)
+		world.placement.begin(_placement_source(), world.supply_depot_definition)
+
+
+func _placement_source() -> Node3D:
+	return field.selection.selected_builder() if (field as ConstructionField).builder_construction_enabled else field.selection.selected_building()
 
 
 func _cancel_site() -> void:
@@ -134,6 +159,7 @@ func _cancel_site() -> void:
 
 
 func _exit_tree() -> void:
+	_displayed_site = null
 	if is_instance_valid(field) and (field as ConstructionField).construction.changed.is_connected(_construction_changed):
 		(field as ConstructionField).construction.changed.disconnect(_construction_changed)
 	super._exit_tree()

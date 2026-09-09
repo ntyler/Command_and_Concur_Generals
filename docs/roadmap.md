@@ -31,7 +31,7 @@ At the priority decision, the repository documented milestones through Milestone
 | **9 — attack-move; complete** | **All eight acceptance groups PASS. Q/button battlefield or minimap targeting for existing Rifles/Rockets, bounded automatic engagements and resumed original slots through existing movement/combat. Expanded/collapsed Help verified at 1280x720 and 1920x1080. See [Milestone 9](milestone-9.md).** |
 | **10 — enemy economy and repeat assaults; complete** | **All eight feature groups PASS in the separate economy-assault scene. Real harvesting funds paid Rifle production, staging and existing attack-move waves. Opponent/integration: 261 passing assertions in both modes. Full matrix: 59/60 executions, 7,393 assertions, three graphical movement-stress failures of unknown attribution, exit 1. See [Milestone 10](milestone-10.md).** |
 | **11 — Supply Depots and Collector production; complete** | **All eight feature groups PASS in Supply Depot Assault. Depot checks 272/284 and earned integration 80/81 pass both modes. Fresh-copy full matrix: 63/64 executions, 8,110 checks, three headless projection-fixture failures of unknown attribution, exit 1. See [Milestone 11](milestone-11.md).** |
-| **12 — next: Bulldozers and builder-driven construction; scheduled before power generation** | HQ-produced Bulldozers select, reach, work and resume paid sites. Current HQ-based automatic construction is prototype behavior. This feature is scheduled, not implemented. |
+| **12 — Bulldozers and builder-driven construction; implemented, validation in progress** | HQ-produced Bulldozers select, reach, work and resume paid sites in [Builder Assault](milestone-12.md). Earlier HQ-based automatic construction remains legacy prototype behavior. Power generation remains afterward. |
 
 Milestone 6 gives construction, harvesting, production and combat a shared match objective. It uses a small flat map and existing units, resources and commands. Strategic AI, additional economic systems and general movement reliability work remain outside this milestone.
 
@@ -63,7 +63,7 @@ The [M11 report](milestone-11.md) saves the real zero-credit depot-to-collector-
 
 ## Next focused feature — builder-driven construction
 
-**Milestone 12 — Bulldozers and builder-driven construction** is scheduled by the user's clarified construction model, **before power generation**. This continues the established milestone sequence after the M11 handoff; implementation has not begun. Headquarters-based automatic construction remains explicitly a prototype, not the final player-facing construction model.
+**Milestone 12 — Bulldozers and builder-driven construction** is implemented in `res://scenes/builder_assault.tscn`, **before power generation**, with final validation in progress. The [M12 report](milestone-12.md) saves the implementation and validation handoff. The existing identifier is retained without renumbering historical milestones. This heading retains its historical link anchor for earlier reports. Headquarters-based automatic construction in the earlier scenes remains explicitly a legacy prototype.
 
 - Headquarters produce **Bulldozer units** through the existing production and safe-deployment systems.
 - Selecting an owned Bulldozer exposes available building choices, including Supply Depot. Valid placement creates an ordinary paid unfinished site using existing placement, payment, geometry and navigation systems.
@@ -72,7 +72,9 @@ The [M11 report](milestone-11.md) saves the real zero-credit depot-to-collector-
 - Bulldozers construct buildings. Supply Depots produce Supply Trucks/Collectors, which gather and deliver supplies and do not construct buildings.
 - Extend the existing construction, production, harvesting, payment, placement, navigation and lifecycle systems. Preserve paid-site accounting, cancellation/refunds, bounded navigation updates, destruction, callbacks, match freeze and Restart; do not replace these systems.
 
-The focused acceptance should prove HQ-produced builders, builder-selected placement, real approach and work eligibility, progress gating, Move/Stop/death pause, another builder's resumption, and depot/collector separation in the playable flow. Costs, health, work rate and presentation remain feature implementation decisions; no invented defaults or power system are implemented in this handoff.
+The focused acceptance covers HQ-produced builders, exact-one builder-selected placement, real approach and physical work eligibility, progress gating, Move/Stop/death pause, a normally produced replacement's resumption, and depot/collector separation in the real playable economy-to-army flow. Bulldozer defaults are 500 credits / six seconds, 200 HP and speed 3.5. Existing building prices and working durations remain unchanged. The 1000-credit opening funds a 300-credit Depot and its first 200-credit Collector. No power system or enemy builder strategy is implemented.
+
+**Next: power generation, after Milestone 12.** It remains scheduled future work; no power building, dependency or simulation mechanic is part of M12.
 
 ## Baseline and validation provenance
 
