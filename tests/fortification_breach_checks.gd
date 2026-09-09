@@ -107,7 +107,11 @@ func _paid_single_breach() -> void:
 	_check(troops.all(func(unit: RTSUnit) -> bool: return evidence.deployed.has(unit.unit_id) and unit.unit_id > 11 and unit.is_physics_processing() and unit.global_position.distance_to(ai.config.staging_point) <= ai.config.staging_radius), "every recipient is its live produced actor at physically reached staging")
 	await physics_frame
 	_check(not ai._approach_reachable(troops, ai.config.assault_approach), "closed fixture genuinely rejects a navigation path to retained HQ approach")
-	if not await _until(func() -> bool: return ai.retained_objective_count() == 1, 70, "normal first-wave schedule retains blocked approach despite rejected initial attack move"): return
+	print("BREACH_ASSEMBLED: elapsed=%.3f first_wave=%.3f" % [fort.elapsed, ai.config.first_wave_time])
+	var scheduled_wait := maxf(0.0, ai.config.first_wave_time - fort.elapsed) + 2.0
+	if not await _until(func() -> bool: return ai.retained_objective_count() == 1, scheduled_wait, "normal first-wave schedule retains blocked approach despite rejected initial attack move"):
+		await _breach_diagnostic("scheduled_launch", gate)
+		return
 	_check(ai.launches == 0 and ai.last_wave != null and not ai.last_wave.has_acceptance() and ai.last_wave.assignments.is_empty() and ai._objectives[0]["objective"] == ai.config.assault_approach, "initial rejection is not reported as accepted movement and does not erase objective")
 	if not await _until(func() -> bool: return evidence.started == 1 and evidence.damage > 0, 10, "ordinary produced wave selects reachable blocking gate and deals actual Rifle damage"):
 		await _breach_diagnostic("paid_attack", gate)

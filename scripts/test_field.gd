@@ -535,10 +535,12 @@ func create_navigation_mesh(footprints: Array[Rect2]) -> NavigationMesh:
 		var expanded := obstacle.grow(CLEARANCE).intersection(bounds)
 		blocked.append(expanded)
 		for x in [expanded.position.x, expanded.end.x]:
-			if not xs.has(x):
+			# Rect2 arithmetic can represent a shared thin-barrier edge one float
+			# ULP apart. Avoid degenerate strips; preserve authored clearance.
+			if not xs.any(func(edge: float) -> bool: return absf(edge - x) < 0.00001):
 				xs.append(x)
 		for z in [expanded.position.y, expanded.end.y]:
-			if not zs.has(z):
+			if not zs.any(func(edge: float) -> bool: return absf(edge - z) < 0.00001):
 				zs.append(z)
 	xs.sort()
 	zs.sort()

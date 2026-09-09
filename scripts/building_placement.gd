@@ -179,7 +179,9 @@ func _physics_process(delta: float) -> void:
 		range_indicator.hide()
 		clearance_indicator.hide()
 		conflict_indicator.hide()
+		status.hide()
 		return
+	status.show()
 	var hit := _ground(_pointer)
 	preview.visible = not hit.is_empty() and not field.camera_rig.pointer_over_interface()
 	range_indicator.visible = preview.visible and definition.kind in [RTSBuilding.Kind.GROUND_DEFENSE_BATTERY, RTSBuilding.Kind.AIR_DEFENSE_BATTERY]

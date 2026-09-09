@@ -58,6 +58,9 @@ func _fort_placement_checks() -> void:
 	var gate := await _fort_build(builder, GATE)
 	if gate == null: return
 	_check(gate.site.rectangle.position.x == wall.site.rectangle.end.x and gate.site.rectangle.get_center().y == wall.site.rectangle.get_center().y, "paid wall and gate footprints physically meet at the exact shared end")
+	await physics_frame
+	var seam := Vector3(wall.site.rectangle.end.x, 1, FORT_GATE_POINT.z)
+	_check(not fort._nav_point(seam - Vector3.UP) and fort.fire_query.segment(fort.get_world_3d(), seam + Vector3.FORWARD * 2, seam + Vector3.BACK * 2).blocked, "aligned paid wall/gate join has no navigable or physical gap")
 	_check(_fort_gate_ready(gate, false) and gate.health.current == 700 and gate.production == null, "normal completed paid gate starts closed and has no producer")
 	fort.selection.select_clicked(builder, false)
 	await physics_frame
@@ -65,7 +68,56 @@ func _fort_placement_checks() -> void:
 	var vertical := await _fort_build(builder, WALL, Vector3(-25, 0, 17), 90)
 	if vertical == null: return
 	_check(vertical.footprint == Vector2(0.6, 4) and vertical.orientation_degrees == 90 and vertical.site.orientation_degrees == 90, "paid vertical wall rotates its full physical and committed navigation footprint")
+	_fort_precision_checks()
 	_check(_grid_is(1, 0, 0), "three completed paid barriers preserve zero owner power demand")
+
+
+func _fort_precision_checks() -> void:
+	# Use the actual paid line and rotated wall together with scenario obstacles.
+	# Record the unequal representations of nominally shared expanded edges.
+	var rectangles: Array[Rect2] = fort.construction.navigation._submitted.duplicate()
+	var original := rectangles.duplicate()
+	var mesh := fort.create_navigation_mesh(rectangles)
+	var bounds := fort.field_bounds.grow(-TestField.CLEARANCE)
+	var raw: Array[Vector2] = []
+	for rectangle in rectangles:
+		var expanded := rectangle.grow(TestField.CLEARANCE).intersection(bounds)
+		raw.append(expanded.position)
+		raw.append(expanded.end)
+	var shared := 0
+	for axis in range(2):
+		var edges: Array[float] = []
+		for point in raw:
+			if not edges.has(point[axis]): edges.append(point[axis])
+		edges.sort()
+		for index in range(1, edges.size()):
+			var gap := edges[index] - edges[index - 1]
+			if gap < 0.00001:
+				shared += 1
+				print("NAV_PRECISION: axis=%s a=%.12f b=%.12f gap=%.12f" % ["x" if axis == 0 else "z", edges[index - 1], edges[index], gap])
+	_check(shared > 0 and rectangles == original, "actual mixed barrier fixture exposes unequal shared edges without changing input footprints")
+	var smallest := INF
+	var connections := 0
+	var uses: Dictionary[Vector2i, int] = {}
+	for index in range(mesh.get_polygon_count()):
+		var polygon := mesh.get_polygon(index)
+		for edge in range(polygon.size()):
+			var a := polygon[edge]
+			var b := polygon[(edge + 1) % polygon.size()]
+			smallest = minf(smallest, mesh.vertices[a].distance_to(mesh.vertices[b]))
+			var key := Vector2i(mini(a, b), maxi(a, b))
+			uses[key] = uses.get(key, 0) + 1
+	for count in uses.values():
+		if count == 2: connections += 1
+	_check(smallest > 0.001 and connections > 0 and uses.values().all(func(count: int) -> bool: return count <= 2), "paid mixed line has connected shared polygon edges with no degenerate strips or overoccupied edge")
+	# A separately authored millimetre offset is far larger than float noise and
+	# must survive partitioning; this does not claim a millimetre usable passage.
+	var distinct: Array[Rect2] = [Rect2(-8, -2, 4, 0.6), Rect2(4, -1.999, 4, 0.6)]
+	var distinct_mesh := fort.create_navigation_mesh(distinct)
+	var first := distinct[0].grow(TestField.CLEARANCE).position.y
+	var second := distinct[1].grow(TestField.CLEARANCE).position.y
+	var distinct_vertices := Array(distinct_mesh.vertices)
+	_check(first != second and distinct_vertices.any(func(point: Vector3) -> bool: return point.z == first) and distinct_vertices.any(func(point: Vector3) -> bool: return point.z == second), "distinct authored boundaries survive precision correction without blanket geometry rounding")
 
 
 func _fort_work_checks() -> void:
@@ -127,6 +179,22 @@ func _fort_gate_checks() -> void:
 	var finish := FORT_GATE_POINT + Vector3.BACK * 4
 	var closed_path := _path(start, finish)
 	_check(not fort._nav_point(FORT_GATE_POINT) and _length(closed_path) > 10 and gate._door_collider.disabled == false, "closed gate obstructs actual ground path and retains solid doorway collider")
+	for team in [1, 2]:
+		var actor := _defense_mobile(start, team)
+		actor.set_physics_process(true)
+		await physics_frame
+		_check(actor.move_to(finish), "closed gate allows ordinary detour command for team %d" % team)
+		var crossing := {"outside": false, "inside": false}
+		await _until(func() -> bool:
+			if absf(actor.global_position.z - FORT_GATE_POINT.z) < 0.5:
+				if absf(actor.global_position.x - FORT_GATE_POINT.x) < 4: crossing.inside = true
+				else: crossing.outside = true
+			return not actor.moving,
+			12, "team %d physically detours around the closed gate" % team)
+		_check(crossing.outside and not crossing.inside and actor.movement_state == RTSUnit.MovementState.ARRIVED, "closed gate blocks actual direct passage for team %d without trapping its detour" % team)
+		actor.queue_free()
+		await _frames(3)
+	await physics_frame
 	var before := fort.construction.navigation.generation
 	_check(not gate.request_gate(2, true).accepted and gate.request_gate(1, false).accepted and fort.construction.navigation.generation == before, "foreign gate command rejects and repeated closed request causes no navigation work")
 	_check(gate.request_gate(1, true).accepted and gate.navigation_pending and not gate.physical_open and not gate.effective_ready, "opening keeps the leaf solid and reports pending until synchronized navigation")
@@ -134,6 +202,11 @@ func _fort_gate_checks() -> void:
 	await _until(func() -> bool: return _fort_gate_ready(gate, true), 3, "opening publishes readiness only after actual doorway synchronization")
 	await physics_frame
 	_check(fort._nav_point(FORT_GATE_POINT) and absf(_length(_path(start, finish)) - 8) < 0.03 and gate._door_collider.disabled, "open gate offers actual direct route and physically disabled leaf")
+	var builder := _player_builders()[0]
+	fort.selection.select_clicked(builder, false)
+	var balance := fort.credits.balance(1)
+	var order := builder.order_version
+	_check(not fort.construction.place(1, builder, WALL, FORT_GATE_POINT).accepted and fort.credits.balance(1) == balance and builder.order_version == order, "open gate still reserves its entire doorway against paid wall placement")
 	var support := FORT_GATE_POINT + Vector3.LEFT * 3.5
 	_check(not fort._nav_point(support) and gate.navigation_footprints().size() == 2, "both retained support footprints stay off the ground map")
 	_check(fort.fire_query.segment(fort.get_world_3d(), start + Vector3.UP, finish + Vector3.UP).is_clear(), "shots pass through the real open doorway")
@@ -237,3 +310,13 @@ func _fort_lifecycle_checks() -> void:
 	await _until(func() -> bool: return not fort.construction.navigation.blocked and fort._nav_point(FORT_GATE_POINT), 3, "field departure retires completed barrier navigation without refunds")
 	reparented.free()
 	_check(fort.credits.balance(1) == wallet, "completed departure cannot refund a fixture or player structure")
+	var deleted := _fort_fixture(GATE)
+	await _until(func() -> bool: return not fort.construction.navigation.blocked, 3, "pending-deletion fixture synchronizes closed gate")
+	await physics_frame
+	_check(deleted.request_gate(1, true).accepted, "deleted gate begins a normal pending opening")
+	var deleted_ref: WeakRef = weakref(deleted)
+	deleted.queue_free()
+	await _until(func() -> bool: return deleted_ref.get_ref() == null and not fort.construction.navigation.blocked, 3, "deletion during navigation retires gate and pending callbacks")
+	await _frames(30)
+	await physics_frame
+	_check(fort._nav_point(FORT_GATE_POINT) and fort._nav_point(FORT_GATE_POINT + Vector3.RIGHT * 3.5) and fort.fire_query.segment(fort.get_world_3d(), FORT_GATE_POINT + Vector3.UP + Vector3.FORWARD * 2, FORT_GATE_POINT + Vector3.UP + Vector3.BACK * 2).is_clear(), "stale callback cannot restore deleted doorway, support collision or navigation")
