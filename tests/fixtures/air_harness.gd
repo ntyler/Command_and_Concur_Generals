@@ -1,10 +1,12 @@
 extends "res://tests/fixtures/defense_harness.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M15 focused fixtures. Extra funds/paused hostiles are declared instance-only;
 ## the earned integration passes1000 and uses ordinary finite-supply deposits.
 
-const AIRFIELD: ConstructionDefinition = preload("res://construction/airfield.tres")
-const AIR_DEFENSE: ConstructionDefinition = preload("res://construction/air_defense_battery.tres")
-const HELICOPTER_RECIPE: ProductionDefinition = preload("res://production/attack_helicopter.tres")
+var AIRFIELD: ConstructionDefinition = load("res://construction/airfield.tres")
+var AIR_DEFENSE: ConstructionDefinition = load("res://construction/air_defense_battery.tres")
+var HELICOPTER_RECIPE: ProductionDefinition = load("res://production/attack_helicopter.tres")
 var air: AirAssaultField
 
 

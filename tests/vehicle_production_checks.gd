@@ -1,9 +1,11 @@
 extends "res://tests/base_assault_checks.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## Focused M7 checks on the existing physics/viewport harness. Isolated fixtures
 ## may configure funds/actors; _combined_loop starts at zero and never grants any.
 
-const FACTORY: ConstructionDefinition = preload("res://construction/vehicle_factory.tres")
-const ROCKET_RECIPE: ProductionDefinition = preload("res://production/rocket_vehicle.tres")
+var FACTORY: ConstructionDefinition = load("res://construction/vehicle_factory.tres")
+var ROCKET_RECIPE: ProductionDefinition = load("res://production/rocket_vehicle.tres")
 
 class RefusingAssault extends BaseAssaultField:
 	var reject_rally: bool = false

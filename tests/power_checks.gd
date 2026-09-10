@@ -1,13 +1,15 @@
 extends "res://tests/builder_checks.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M13 isolated fixtures use configurable funds and explicitly labelled registered
 ## buildings for accounting/timing. Actual construction and recovery use paid
 ## Bulldozer work; power_integration_checks proves the unmodified earned opening.
 ## Timing observes completed physics ticks: each producer reads the current owner
 ## snapshot immediately before advancing its active job. No time_scale changes.
 
-const POWER_PLANT: ConstructionDefinition = preload("res://construction/power_plant.tres")
-const POWER_BARRACKS: ConstructionDefinition = preload("res://construction/barracks.tres")
-const POWER_RIFLE: ProductionDefinition = preload("res://production/rifle.tres")
+var POWER_PLANT: ConstructionDefinition = load("res://construction/power_plant.tres")
+var POWER_BARRACKS: ConstructionDefinition = load("res://construction/barracks.tres")
+var POWER_RIFLE: ProductionDefinition = load("res://production/rifle.tres")
 var powered: PowerAssaultField
 
 

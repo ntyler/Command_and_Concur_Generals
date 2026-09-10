@@ -21,6 +21,7 @@ var _submitted: Array[Rect2] = []
 var _previous: Array[Rect2] = []
 var _active_generation: int = 0
 var _resume_generation: int = 0
+var _deferred_synchronizations: Dictionary[Callable, int] = {}
 var _mesh: NavigationMesh
 var _map: RID
 var _region: RID
@@ -43,6 +44,7 @@ func request(rectangles: Array[Rect2]) -> int:
 	if field() == null:
 		return 0
 	generation += 1
+	_deferred_synchronizations.clear()
 	_desired = rectangles.duplicate()
 	busy = true
 	blocked = true
@@ -83,8 +85,6 @@ func advance(delta: float) -> void:
 		synchronized.emit(finished)
 		if field() == null or finished != generation:
 			return
-		if field().manual_pause_active:
-			return # Retry the synchronized notification after resume; retain its mesh.
 		_active_generation = 0
 		_mesh = null
 		_resume_generation = finished
@@ -95,6 +95,24 @@ func advance(delta: float) -> void:
 
 func _finish_ready() -> void:
 	var finished := _resume_generation
+	if field() == null or field().manual_pause_active:
+		return
+	if finished != generation:
+		_resume_generation = 0
+		return
+	# A synchronous listener may open Pause before a later gate can commit its
+	# collider. Resume only those deferred listeners, without emitting the mesh
+	# synchronization event twice or exposing actors to an uncommitted collider.
+	for callback in _deferred_synchronizations.keys():
+		if field() == null or field().manual_pause_active:
+			return
+		if finished != generation:
+			_resume_generation = 0
+			return
+		var expected: int = _deferred_synchronizations.get(callback, 0)
+		_deferred_synchronizations.erase(callback)
+		if expected == finished and callback.is_valid():
+			callback.call(finished)
 	if field() == null or field().manual_pause_active:
 		return
 	if finished != generation:
@@ -113,6 +131,15 @@ func _finish_ready() -> void:
 	_resume_generation = 0
 	if field() != null and generation == finished and not busy:
 		ready.emit(finished)
+
+
+func defer_synchronization(callback: Callable, expected_generation: int) -> void:
+	if field() != null and expected_generation == generation:
+		_deferred_synchronizations[callback] = expected_generation
+
+
+func forget_synchronization(callback: Callable) -> void:
+	_deferred_synchronizations.erase(callback)
 
 
 func _submit() -> void:
@@ -187,6 +214,7 @@ func close() -> void:
 	busy = false
 	_active_generation = 0
 	_resume_generation = 0
+	_deferred_synchronizations.clear()
 	_mesh = null
 	_desired.clear()
 	_submitted.clear()

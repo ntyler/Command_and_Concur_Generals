@@ -1,14 +1,16 @@
 extends "res://tests/builder_checks.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M14 isolated fixtures: normal scene with extra configured funds and frozen
 ## enemy scheduler, registered stationary bodies/mobile targets on clear south
 ## ground, and labelled physical walls. No shared resources/timers are changed.
 ## Construction tests use real paid travel/work. The separate earned suite uses
 ## the original wallet, a paid Collector and finite-cache income without grants.
 
-const DEFENSE: ConstructionDefinition = preload("res://construction/ground_defense_battery.tres")
-const POWER_PLANT: ConstructionDefinition = preload("res://construction/power_plant.tres")
-const POWER_BARRACKS: ConstructionDefinition = preload("res://construction/barracks.tres")
-const POWER_RIFLE: ProductionDefinition = preload("res://production/rifle.tres")
+var DEFENSE: ConstructionDefinition = load("res://construction/ground_defense_battery.tres")
+var POWER_PLANT: ConstructionDefinition = load("res://construction/power_plant.tres")
+var POWER_BARRACKS: ConstructionDefinition = load("res://construction/barracks.tres")
+var POWER_RIFLE: ProductionDefinition = load("res://production/rifle.tres")
 const DEFENSE_POINT := Vector3(-18, 0, 16)
 const DEFENSE_TARGET := Vector3(-10, 0, 16)
 var defended: DefenseAssaultField

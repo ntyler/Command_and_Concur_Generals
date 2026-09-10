@@ -175,10 +175,14 @@ func closing_obstructed() -> bool:
 
 
 func _navigation_synchronized(generation: int) -> void:
-	if is_inside_tree() and get_tree().paused:
-		return
 	if not navigation_pending or generation != nav_generation:
 		return
+	if is_inside_tree() and get_tree().paused:
+		if _navigation != null:
+			_navigation.defer_synchronization(_navigation_synchronized, generation)
+		return
+	if _navigation != null:
+		_navigation.forget_synchronization(_navigation_synchronized)
 	if not _authorized(_transition_owner):
 		freeze_gate()
 		return
@@ -257,6 +261,7 @@ func _on_died(source: Node) -> void:
 
 func _disconnect_navigation() -> void:
 	if _navigation != null:
+		_navigation.forget_synchronization(_navigation_synchronized)
 		if _navigation.synchronized.is_connected(_navigation_synchronized):
 			_navigation.synchronized.disconnect(_navigation_synchronized)
 		if _navigation.ready.is_connected(_navigation_ready):

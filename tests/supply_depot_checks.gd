@@ -1,11 +1,13 @@
 extends "res://tests/hud_clarity_checks.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M11 focused fixtures. Geometry/cargo injection is deliberately confined to
 ## routing, accounting and failure checks; the separate earned integration suite
 ## proves the complete economy using ordinary loading, building and production.
 ## Use the inherited 180-second watchdog and tools/run-godot.ps1 external timeout.
 
-const DEPOT: ConstructionDefinition = preload("res://construction/supply_depot.tres")
-const COLLECTOR_RECIPE: ProductionDefinition = preload("res://production/collector_truck.tres")
+var DEPOT: ConstructionDefinition = load("res://construction/supply_depot.tres")
+var COLLECTOR_RECIPE: ProductionDefinition = load("res://production/collector_truck.tres")
 const DEPOT_POINT := Vector3(-10.1, 0, -6)
 
 class RouteFixture extends HarvestField:

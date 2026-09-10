@@ -1,10 +1,12 @@
 extends "res://tests/supply_depot_checks.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M12 focused fixtures use real physics/navigation and normal paid production.
 ## Isolated fixtures freeze the enemy scheduler, configure extra starting funds,
 ## and insert labelled physical blockers; earned gameplay is a separate suite.
 ## The inherited wall watchdog and tools/run-godot.ps1 bound every engine run.
 
-const BUILDER_RECIPE: ProductionDefinition = preload("res://production/bulldozer.tres")
+var BUILDER_RECIPE: ProductionDefinition = load("res://production/bulldozer.tres")
 const BUILDER_PARK := Vector3(-19, 0, 17)
 var builders: BuilderAssaultField
 

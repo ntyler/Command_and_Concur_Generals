@@ -28,7 +28,7 @@ func _run() -> void:
 	var chosen := "all"
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--pause-case="): chosen = argument.trim_prefix("--pause-case=")
-	var cases := ["input", "freeze", "lifecycle"]
+	var cases := ["input", "freeze", "lifecycle", "teardown"]
 	_check(chosen == "all" or cases.has(chosen), "recognized focused pause case")
 	for case in cases:
 		if chosen != "all" and chosen != case: continue
@@ -38,6 +38,7 @@ func _run() -> void:
 			"input": await _pause_input()
 			"freeze": await _pause_freeze()
 			"lifecycle": await _pause_lifecycle()
+			"teardown": await _pause_teardown()
 		print("PAUSE_CASE: %s checks=%d failures=%d" % [case, checks - before, failures - failed])
 		if paused and is_instance_valid(battle): battle.resume_match()
 	if is_instance_valid(field): field.queue_free()
@@ -249,8 +250,9 @@ func _pause_freeze() -> void:
 	_check(site.state == ConstructionSite.State.CANCELLING and battle.construction.navigation.generation == generation and battle.construction.navigation.submissions == submissions and battle.credits.balance(1) == funds + site.paid, "paused lifecycle cleanup cannot submit navigation or refund twice while wall time passes")
 	await _pause_key(KEY_ESCAPE)
 	if not await _until(func() -> bool: return not battle.construction.navigation.blocked and battle.construction.unfinished_id == 0, 3, "Resume finishes retained paid-site deletion and restores terrain"): return
-	var sync_pause := {"fired": false}
+	var sync_pause := {"fired": false, "notifications": 0}
 	var pause_during_sync := func(_generation: int) -> void:
+		sync_pause.notifications += 1
 		if not sync_pause.fired:
 			sync_pause.fired = true
 			battle.pause_match()
@@ -268,12 +270,13 @@ func _pause_freeze() -> void:
 	_check(paused and gate.navigation_pending and gate.requested_open and not gate.physical_open and gate.transition_generation == transition and battle.construction.navigation.generation == generation and battle.construction.navigation.submissions == submissions, "pending gate transition and direct late topology callback remain frozen through Pause")
 	await _pause_key(KEY_ESCAPE)
 	if not await _until(func() -> bool: return paused and sync_pause.fired, 3, "synchronous navigation listener opens Pause before gate physical commit"): return
-	_check(gate.navigation_pending and not gate.physical_open and battle.construction.navigation.blocked and battle.construction.navigation._active_generation == generation, "pause during synchronization retains current mesh and pending gate generation")
-	battle.construction.navigation.synchronized.disconnect(pause_during_sync)
+	_check(gate.navigation_pending and not gate.physical_open and battle.construction.navigation.blocked and battle.construction.navigation._resume_generation == generation, "pause during synchronization retains witnessed generation and defers collider commit")
 	await _pause_wall_hold(300)
 	_check(gate.navigation_pending and not gate.physical_open, "synchronously paused gate stays unchanged through subsequent wall time")
 	await _pause_key(KEY_ESCAPE)
 	await _until(func() -> bool: return _fort_gate_ready(gate, true), 3, "Resume completes the original accepted gate operation without replacing it")
+	_check(sync_pause.notifications == 1 and battle.construction.navigation._deferred_synchronizations.is_empty(), "Resume delivers synchronization once and drains only the deferred gate callback")
+	battle.construction.navigation.synchronized.disconnect(pause_during_sync)
 
 
 func _pause_lifecycle() -> void:
@@ -318,3 +321,26 @@ func _pause_lifecycle() -> void:
 	await _frames(8)
 	_adopt_fort(current_scene as FortifiedAssaultField)
 	_check(fort != null and not paused and fort.result == BaseAssaultField.Result.RUNNING and fort.gameplay_enabled and fort.credits.balance(1) == 1000, "existing result-screen Restart remains clean and usable")
+
+
+func _pause_teardown() -> void:
+	for pause_before_exit in [false, true]:
+		await _fresh_fort(2000)
+		var manager := fort.construction
+		var navigation := manager.navigation
+		var producer := fort.headquarters.production
+		_check(producer.enqueue(1, BUILDER_RECIPE).accepted, "teardown fixture retains a normally paid HQ production job")
+		var result := await _builder_place(_player_builders()[0], DEPOT, DEPOT_POINT)
+		_check(result.accepted and navigation.blocked, "teardown fixture retains paid construction and pending navigation")
+		if pause_before_exit: await _pause_key(KEY_ESCAPE)
+		var references: Array[WeakRef] = [weakref(fort), weakref(fort.pause_menu), weakref(fort.selection)]
+		for actor in fort.units: references.append(weakref(actor))
+		fort.queue_free()
+		await _frames(6)
+		_check(not paused and root.get_children().is_empty() and references.all(func(reference: WeakRef) -> bool: return reference.get_ref() == null), "normal/paused teardown frees field, menu, selection and all units: paused=%s" % pause_before_exit)
+		_check(manager.closed and manager.sites.is_empty() and navigation.closed and navigation._deferred_synchronizations.is_empty() and navigation.ready.get_connections().is_empty() and navigation.synchronized.get_connections().is_empty() and producer._closed and producer.count() == 0, "normal/paused teardown closes pending work and removes listeners: paused=%s" % pause_before_exit)
+		var submissions := navigation.submissions
+		await _pause_wall_hold(100)
+		navigation.advance(10.0)
+		producer.advance(10.0)
+		_check(root.get_children().is_empty() and navigation.submissions == submissions and producer.count() == 0, "late callbacks cannot recreate or reactivate an exited match")

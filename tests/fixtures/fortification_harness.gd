@@ -1,9 +1,11 @@
 extends "res://tests/fixtures/air_harness.gd"
+## Load fixture assets per runner instance: compile-time preloads across this
+## inherited harness retain the cyclic gameplay script graph at engine shutdown.
 ## M16 fixtures reuse the existing simulation watchdog, input, layout, physics
 ## and paid builder helpers. Extra funds/paused enemies are instance-only.
 
-const WALL: ConstructionDefinition = preload("res://construction/wall.tres")
-const GATE: ConstructionDefinition = preload("res://construction/gate.tres")
+var WALL: ConstructionDefinition = load("res://construction/wall.tres")
+var GATE: ConstructionDefinition = load("res://construction/gate.tres")
 const FORT_GATE_POINT := Vector3(-14, 0, 15)
 const FORT_WALL_POINT := Vector3(-20, 0, 15)
 var fort: FortifiedAssaultField
