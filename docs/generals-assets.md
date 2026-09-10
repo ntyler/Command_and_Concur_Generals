@@ -19,7 +19,8 @@ Open `scenes/generals_asset_browser.tscn` in Godot and press **F6**, or run:
 ```
 
 Search by model name or original object name, select an entry, drag to orbit,
-and scroll to zoom. The catalog includes **7,671 static 3D previews** and **1,230
+and scroll to zoom. The Dozer, Battleship and Carrier buttons open those models
+directly. The catalog includes **7,671 static 3D previews** and **1,230
 source-only entries**. Enable the source-file checkbox to see standalone animation,
 hierarchy and non-renderable files. Across archive versions there are 9,000 W3D
 files; the catalog resolves these to 8,901 names, favoring Zero Hour, then patch
@@ -92,6 +93,8 @@ with invented art. Most other skinned library models display their bind pose.
 This import does not add all original units as playable recipes, restore original
 animations or complete the Tempest/superweapon facility. Previous milestone and
 build-area/Pause reports describe their own saved validation and remain separate.
+The subsequent [full-game request and source inventory](full-game-port.md) records
+the expanded data copy, naval definitions and outstanding runtime decision.
 
 ## Rebuild
 

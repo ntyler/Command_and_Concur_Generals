@@ -54,11 +54,17 @@ func _ready() -> void:
 	if catalog is Dictionary:
 		entries = catalog.models
 	_filter("")
-	select_model("avconstdoz_a")
+	var initial_model := "avconstdoz_a"
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--library-model="):
+			initial_model = argument.trim_prefix("--library-model=")
+	select_model(initial_model)
 	_update_camera()
 	get_window().grab_focus()
 	if "--library-capture" in OS.get_cmdline_user_args():
 		_capture_examples.call_deferred()
+	elif "--library-capture-ships" in OS.get_cmdline_user_args():
+		_capture_examples.call_deferred(true)
 
 
 func _build_ui() -> void:
@@ -79,6 +85,14 @@ func _build_ui() -> void:
 	title.text = "GENERALS OBJECT LIBRARY"
 	title.add_theme_font_size_override("font_size", 20)
 	column.add_child(title)
+	var featured := HBoxContainer.new()
+	column.add_child(featured)
+	for item in [["Dozer", "avconstdoz_a"], ["Battleship", "avbattlesh"], ["Carrier", "psaircarrier"]]:
+		var button := Button.new()
+		button.text = item[0]
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_show_featured.bind(item[1]))
+		featured.add_child(button)
 	search = LineEdit.new()
 	search.placeholder_text = "Search objects or model names…"
 	search.text_changed.connect(_filter)
@@ -133,6 +147,12 @@ func select_model(name: String) -> bool:
 			_selected(index)
 			return true
 	return false
+
+
+func _show_featured(name: String) -> void:
+	search.text = ""
+	_filter("")
+	select_model(name)
 
 
 func _selected(index: int) -> void:
@@ -195,12 +215,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_camera()
 
 
-func _capture_examples() -> void:
-	DirAccess.make_dir_recursive_absolute("res://validation-output/generals-library/screenshots")
-	for name in ["avconstdoz_a", "airngr_skn", "abbtcmdhq", "avcomanche", "abwarfact", "ubpalace", "nbpcenter"]:
-		var selected := select_model(name)
+func _capture_examples(naval: bool = false) -> void:
+	var directory := "res://validation-output/full-game-port/screenshots" if naval else "res://validation-output/generals-library/screenshots"
+	var names: Array[String] = []
+	if naval:
+		names.assign(["avbattlesh", "psaircarrier"])
+	else:
+		names.assign(["avconstdoz_a", "airngr_skn", "abbtcmdhq", "avcomanche", "abwarfact", "ubpalace", "nbpcenter"])
+	DirAccess.make_dir_recursive_absolute(directory)
+	var successful := true
+	for name in names:
+		_show_featured(name)
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
-		var error := get_viewport().get_texture().get_image().save_png("res://validation-output/generals-library/screenshots/%s.png" % name)
-		print("LIBRARY_CAPTURE: %s loaded=%s saved=%s" % [name, selected and selected_name == name and is_instance_valid(model), error == OK])
-	get_tree().quit()
+		var error := get_viewport().get_texture().get_image().save_png(directory + "/%s.png" % name)
+		var loaded := selected_name == name and is_instance_valid(model)
+		successful = successful and loaded and error == OK
+		print("LIBRARY_CAPTURE: %s loaded=%s saved=%s" % [name, loaded, error == OK])
+	get_tree().quit(0 if successful else 1)
