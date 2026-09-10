@@ -344,3 +344,50 @@ func _pause_teardown() -> void:
 		navigation.advance(10.0)
 		producer.advance(10.0)
 		_check(root.get_children().is_empty() and navigation.submissions == submissions and producer.count() == 0, "late callbacks cannot recreate or reactivate an exited match")
+	await _pause_deferred_gate_teardown()
+
+
+func _pause_deferred_gate_teardown() -> void:
+	for detach_gate in [false, true]:
+		await _fresh_fort(2000)
+		var navigation := fort.construction.navigation
+		var gate := _fort_fixture(GATE, FORT_GATE_POINT)
+		if not await _until(func() -> bool: return not navigation.blocked, 3, "deferred teardown fixture gate navigation synchronizes"): return
+		var notices := {"synchronized": 0, "ready": 0, "pause": false}
+		# Connect before request_gate binds the gate, so Pause happens before its
+		# collider callback. The same observer first witnesses an ordinary opening.
+		var observe_sync := func(_generation: int) -> void:
+			notices.synchronized += 1
+			if notices.pause: fort.pause_match()
+		navigation.synchronized.connect(observe_sync)
+		navigation.ready.connect(func(_generation: int) -> void: notices.ready += 1)
+		await physics_frame
+		_check(gate.request_gate(1, true).accepted, "unpaused control accepts ordinary gate opening")
+		if not await _until(func() -> bool: return _fort_gate_ready(gate, true), 3, "unpaused control commits collider and resumes navigation"): return
+		_check(notices.synchronized == 1 and notices.ready == 1 and navigation._deferred_synchronizations.is_empty(), "unpaused gate emits synchronization and ready exactly once without deferred callbacks")
+		notices.pause = true
+		await physics_frame
+		_check(gate.request_gate(1, false).accepted, "deferred teardown accepts gate closing before Pause")
+		if not await _until(func() -> bool: return paused, 3, "deferred teardown pauses inside synchronization before collider commit"): return
+		var callback := gate._navigation_synchronized
+		var generation := gate.nav_generation
+		_check(notices.synchronized == 2 and notices.ready == 1 and gate.physical_open and gate.navigation_pending and navigation.blocked and navigation._resume_generation == generation and navigation._deferred_synchronizations.get(callback, 0) == generation, "teardown starts with an actual deferred gate callback and no closing collider commit")
+		var field_reference: WeakRef = weakref(fort)
+		var gate_reference: WeakRef = weakref(gate)
+		if detach_gate:
+			# Keep this removed Node alive only to deliver a real matching late
+			# callback after its match exits; it is explicitly freed below.
+			fort.remove_child(gate)
+			_check(navigation._deferred_synchronizations.is_empty() and not navigation.synchronized.is_connected(callback), "gate departure forgets its populated deferred callback and disconnects its listener")
+		fort.queue_free()
+		await _frames(6)
+		_check(not paused and field_reference.get_ref() == null and navigation.closed and navigation._deferred_synchronizations.is_empty() and navigation.synchronized.get_connections().is_empty() and navigation.ready.get_connections().is_empty(), "paused match teardown clears retained synchronization and listeners: detached_gate=%s" % detach_gate)
+		var submissions := navigation.submissions
+		if detach_gate:
+			var state := [gate.physical_open, gate.requested_open, gate.navigation_pending, gate.transition_generation]
+			callback.call(generation)
+			gate._navigation_ready(generation)
+			_check([gate.physical_open, gate.requested_open, gate.navigation_pending, gate.transition_generation] == state and gate._navigation == null, "matching late gate synchronization and ready callbacks cannot mutate an exited match")
+			gate.free()
+		navigation.advance(10.0)
+		_check(root.get_children().is_empty() and gate_reference.get_ref() == null and not callback.is_valid() and navigation.submissions == submissions and notices.synchronized == 2 and notices.ready == 1, "closed navigation cannot replay synchronization, emit ready, or retain the exited gate")

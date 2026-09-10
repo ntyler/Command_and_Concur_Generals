@@ -114,6 +114,8 @@ func gate_status() -> String:
 
 
 func _owner_field() -> ConstructionField:
+	if not is_instance_valid(gameplay_field):
+		return null # A detached gate can receive a late callback after match teardown.
 	var owner := gameplay_field as ConstructionField
 	return owner if is_instance_valid(owner) and owner.is_inside_tree() and not owner._closing and not owner.is_queued_for_deletion() and owner.contains_building(self) and gameplay_field == owner else null
 
