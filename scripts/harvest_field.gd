@@ -10,6 +10,7 @@ var collectors: Array[CollectorTruck] = []
 var harvest_panel: HarvestPanel
 var _caches: Dictionary[int, WeakRef] = {}
 var _access_claims: Dictionary = {} # target instance ID -> at most eight weak occupants.
+var _collection_wait_claims: Dictionary = {} # Live parked truck -> local destination.
 var _interaction_query := PhysicsRayQueryParameters3D.new()
 var _access_query := PhysicsShapeQueryParameters3D.new()
 
@@ -227,6 +228,73 @@ func plan_access(unit: CollectorTruck, target: Node3D) -> Dictionary:
 	return best
 
 
+func choose_collection_cache(unit: CollectorTruck, origin: Vector3, radius: float, excluded: Array[int] = []) -> Dictionary:
+	if not harvest_member(unit) or unit.navigation_suspended or not origin.is_finite() or not is_finite(radius) or radius < 0.0:
+		return {}
+	var candidates := registered_caches()
+	candidates.sort_custom(func(a: SupplyCache, b: SupplyCache) -> bool: return a.get_instance_id() < b.get_instance_id())
+	var best: Dictionary = {}
+	var shortest := INF
+	# Filter the fixed collection area BEFORE navigation queries. Returning to a
+	# distant drop-off never moves this anchor or expands the resource search.
+	for cache in candidates:
+		if cache.depleted or cache.get_instance_id() in excluded or Vector2(origin.x, origin.z).distance_to(Vector2(cache.global_position.x, cache.global_position.z)) > radius:
+			continue
+		var access := plan_access(unit, cache)
+		if not access.is_empty() and float(access["route_length"]) < shortest - 0.001:
+			shortest = access["route_length"]
+			best = {"cache": cache, "access": access, "route_length": shortest}
+	return best
+
+
+func collection_wait_position_clear(unit: CollectorTruck, point: Vector3) -> bool:
+	if not harvest_member(unit) or unit.navigation_suspended or not _nav_point(point):
+		return false
+	var flat := Vector2(point.x, point.z)
+	var targets: Array[Node3D] = []
+	for building in registered_buildings():
+		if building.production != null:
+			var exit := building.exit_position()
+			# Same protected exit rectangle used by construction, expanded by the
+			# collector body and stopping tolerance rather than just its center.
+			if Rect2(exit.x - 1.3, exit.z - 1.8, 3.1, 3.6).grow(RTSUnit.BODY_RADIUS + unit.stopping_distance).has_point(flat):
+				return false
+		if building.is_drop_off():
+			targets.append(building)
+	for cache in registered_caches():
+		targets.append(cache)
+	for target in targets:
+		for access in access_positions(target):
+			var nearest := Geometry3D.get_closest_point_to_segment(point, access["point"], access["dock"])
+			if point.distance_to(nearest) < RTSUnit.BODY_RADIUS * 2.0 + unit.stopping_distance + 0.2:
+				return false
+	for identity in _collection_wait_claims.keys():
+		var claim: Dictionary = _collection_wait_claims[identity]
+		var occupant := (claim["unit"] as WeakRef).get_ref() as CollectorTruck
+		if not is_instance_valid(occupant) or not harvest_member(occupant):
+			_collection_wait_claims.erase(identity)
+		elif occupant != unit and point.distance_to(claim["point"]) < RTSUnit.BODY_RADIUS * 2.0 + unit.stopping_distance * 2.0 + 0.2:
+			return false
+	_access_query.exclude = [unit.get_rid()]
+	_access_query.transform = Transform3D(Basis.IDENTITY, point + Vector3.UP * RTSUnit.BODY_HEIGHT / 2.0)
+	return get_world_3d().direct_space_state.intersect_shape(_access_query, 1).is_empty()
+
+
+func collection_wait_point(unit: CollectorTruck) -> PackedVector3Array:
+	if not harvest_member(unit) or unit.navigation_suspended:
+		return PackedVector3Array()
+	# A bounded local parking search, using the existing movement system. Park
+	# clear of every production exit and loading/unloading lane, even when empty.
+	for radius in [0.0, 2.5, 5.0, 7.5]:
+		for index in (1 if radius == 0.0 else 16):
+			var angle := float(index) * TAU / 16.0
+			var point: Vector3 = unit.global_position + Vector3(cos(angle), 0, sin(angle)) * radius
+			if collection_wait_position_clear(unit, point) and valid_rally(unit.global_position, point):
+				_collection_wait_claims[unit.get_instance_id()] = {"unit": weakref(unit), "point": point, "generation": unit.harvesting.generation}
+				return PackedVector3Array([point])
+	return PackedVector3Array()
+
+
 func _clear_access(unit: RTSUnit, access: Dictionary) -> bool:
 	# A valid nav projection alone cannot prove capsule or interaction clearance.
 	var point: Vector3 = access["point"]
@@ -245,7 +313,14 @@ func claim_access(unit: CollectorTruck, access: Dictionary) -> void:
 	_access_claims[access["target"]][access["slot"]] = weakref(unit)
 
 
+func release_collection_wait(unit: CollectorTruck, expected_generation: int = -1) -> void:
+	var identity := unit.get_instance_id()
+	if expected_generation < 0 or (_collection_wait_claims.has(identity) and _collection_wait_claims[identity]["generation"] == expected_generation):
+		_collection_wait_claims.erase(identity)
+
+
 func release_access(unit: CollectorTruck) -> void:
+	release_collection_wait(unit)
 	# Bounded by scene targets and eight slots, at departures/interruption only.
 	for id in _access_claims.keys():
 		var claims: Dictionary = _access_claims[id]
@@ -330,6 +405,7 @@ func _dispatch_resource(result: CommandBatchResult, selected: Array[RTSUnit], ow
 
 func _exit_tree() -> void:
 	_access_claims.clear()
+	_collection_wait_claims.clear()
 	_caches.clear()
 	collectors.clear()
 	super._exit_tree()

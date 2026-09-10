@@ -13,7 +13,7 @@ $suites = @(
     'defense_checks', 'defense_integration_checks', 'defense_ui_checks', 'defense_boundary_checks',
     'power_checks', 'power_integration_checks', 'power_ui_checks',
     'builder_checks', 'builder_integration_checks',
-    'supply_depot_checks', 'supply_depot_integration_checks',
+    'supply_depot_checks', 'supply_depot_integration_checks', 'automatic_harvesting_checks', 'automatic_deployment_callback_checks',
     'enemy_economy_checks', 'enemy_economy_integration_checks',
     'attack_move_checks', 'attack_move_batch_checks', 'attack_move_ui_checks',
     'hud_clarity_checks', 'milestone_checks', 'movement_repair_checks',

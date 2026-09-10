@@ -627,6 +627,8 @@ func _construction_failure_checks() -> void:
 
 func _earned_construction_checks() -> void:
 	await _fresh_construction(0, 500)
+	# The exact 500-credit ledger deliberately isolates one selected cache.
+	for unit in world.collectors: unit.collection_radius = 0.0
 	var denied := await _place()
 	_check(not denied.accepted and world.construction.sites.is_empty() and world.credits.balance(1) == 0, "zero-funded supported fixture cannot afford a barracks")
 	var truck := _select_collector()
@@ -644,7 +646,7 @@ func _earned_construction_checks() -> void:
 	var site := await _ready_site(result)
 	if site == null or not await _complete_site(site): return
 	if not await _until(func() -> bool: return ledger["deposits"] == 500 and work.cargo == 0, 25, "collector continues through construction topology update and deposits final load"): return
-	_check(ledger["loads"] == 500 and ledger["coherent"] and cache.remaining == 0 and world.credits.balance(1) == 100 and work.state == CollectorHarvest.State.IDLE, "all 500 finite supplies conserved across navigation update with exactly 100 left for Rifle")
+	_check(ledger["loads"] == 500 and ledger["coherent"] and cache.remaining == 0 and world.credits.balance(1) == 100 and work.state == CollectorHarvest.State.WAITING, "all 500 finite supplies conserved across navigation update with exactly 100 left for Rifle")
 	var producer := site.building().production
 	_check(producer.set_rally(1, Vector3(1, 0, 1)).accepted, "earned barracks accepts ordinary rally")
 	var seen := {"unit": 0, "rally": false}

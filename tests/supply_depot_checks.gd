@@ -160,7 +160,7 @@ func _depot_construction() -> void:
 	var old_truck := _select_collector()
 	_check(harvest.valid_dropoff(harvest.headquarters, 1) and not harvest.valid_dropoff(harvest.barracks, 1) and not harvest.barracks.supports_recipe(COLLECTOR_RECIPE), "legacy HQ remains eligible while barracks keeps Rifle-only behavior")
 	_check(_complete(harvest.issue_harvest(harvest.caches[0])), "earlier HQ-only harvesting accepts ordinary assignment")
-	await _until(func() -> bool: return old_truck.harvesting.state == CollectorHarvest.State.IDLE and harvest.credits.balance(1) == 25, 22, "earlier HQ-only scene performs a real complete load and deposit")
+	await _until(func() -> bool: return old_truck.harvesting.state == CollectorHarvest.State.WAITING and harvest.credits.balance(1) == 25, 22, "earlier HQ-only scene performs a real complete load and deposit before waiting")
 
 
 func _route_depot(route: RouteFixture, point: Vector3) -> RTSBuilding:
@@ -523,9 +523,14 @@ func _depot_production() -> void:
 	var produced := _last_unit(producer) as CollectorTruck
 	var live_collectors := battle.units.filter(func(unit: RTSUnit) -> bool: return unit is CollectorTruck and battle.contains_unit(unit)).size()
 	_check(deployed == [paid.job_id] and producer.count() == 0 and observed["fresh"] and observed["clear"] and live_collectors == initial_count - occupants.size() + 1, "deployment is registered, collision-clear, fresh and exactly once with normal collector configuration")
-	_check(producer.last_deployment["rally_accepted"] and produced.harvesting.state == CollectorHarvest.State.IDLE and produced.harvesting.cache_node() == null and not producer.cancel(1, paid.job_id).accepted, "ground rally retains no automatic harvesting assignment and deployed job cannot refund")
-	await _until(func() -> bool: return not produced.moving, 10, "new collector follows normal ground rally movement")
-	_check(produced.movement_state == RTSUnit.MovementState.ARRIVED and produced.position.distance_to(producer.rally_point) < 0.4, "collector actually arrives at its rally through existing movement")
+	_check(producer.last_deployment["rally_accepted"] and produced.harvesting.state == CollectorHarvest.State.IDLE and produced.harvesting.cache_node() == null and produced.deployment_collection_pending() and not producer.cancel(1, paid.job_id).accepted, "ground rally defers automatic harvesting until arrival and deployed job cannot refund")
+	var started_at: Array[Vector3] = []
+	produced.harvesting.changed.connect(func() -> void:
+		if produced.harvesting.automatic and started_at.is_empty(): started_at.append(produced.global_position)
+	)
+	await _until(func() -> bool: return not started_at.is_empty(), 12, "new collector completes normal rally movement then starts collection automatically")
+	_check(not started_at.is_empty() and started_at[0].distance_to(producer.rally_point) < 0.4 and not produced.deployment_collection_pending(), "collector reaches its rally through existing movement before the one-time harvesting handoff")
+	produced.stop() # Isolate the remaining queue payment/refund assertions.
 	var rejected_rally_job := producer.enqueue(1, COLLECTOR_RECIPE)
 	_check(rejected_rally_job.accepted and producer.set_rally(1, Vector3(-5, 0, 3)).accepted, "rejected-rally fixture starts with a paid collector and ordinarily accepted ground rally")
 	# Isolated deployment-time fault: the formerly accepted ground destination
@@ -534,8 +539,10 @@ func _depot_production() -> void:
 	var paid_balance := battle.credits.balance(1)
 	if not await _until(func() -> bool: return deployed.size() == 2, 7, "collector finishes actual training when its stored rally is no longer usable"): return
 	var idle_collector := _last_unit(producer) as CollectorTruck
-	_check(idle_collector != null and idle_collector != produced and battle.contains_unit(idle_collector) and not idle_collector.moving and idle_collector.harvesting.cargo == 0 and idle_collector.harvesting.state == CollectorHarvest.State.IDLE and idle_collector.harvesting.cache_node() == null and not producer.last_deployment["rally_accepted"] and producer.count() == 0, "rejected rally leaves one fresh registered idle collector and removes its deployed job")
+	_check(idle_collector != null and idle_collector != produced and battle.contains_unit(idle_collector) and idle_collector.harvesting.cargo == 0 and idle_collector.harvesting.state == CollectorHarvest.State.IDLE and idle_collector.harvesting.cache_node() == null and idle_collector.deployment_collection_pending() and not producer.last_deployment["rally_accepted"] and producer.count() == 0, "rejected rally leaves one fresh registered collector clearing its exit before automatic harvesting")
 	_check(not producer.cancel(1, rejected_rally_job.job_id).accepted and battle.credits.balance(1) == paid_balance, "rejected collector rally cannot refund an already deployed paid job")
+	await _until(func() -> bool: return idle_collector.harvesting.automatic, 8, "collector with an invalid rally safely clears production access then automatically harvests")
+	idle_collector.stop()
 	await _frames(90)
 	_check(deployed == [paid.job_id, rejected_rally_job.job_id] and producer.count() == 0 and battle.credits.balance(1) == paid_balance and battle.contains_unit(idle_collector), "rejected rally neither duplicates deployment nor replays payment after subsequent frames")
 	for index in 3: _check(producer.enqueue(1, COLLECTOR_RECIPE).accepted, "destruction fixture purchases a real pending collector")

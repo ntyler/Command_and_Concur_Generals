@@ -183,20 +183,30 @@ func _advance_head(delta: float) -> void:
 	_jobs.pop_front()
 	message = ""
 	var deployment_order := unit.order_version
+	var collector := unit as CollectorTruck
+	var harvest_generation := collector.harvesting.generation if collector != null else -1
+	var collection_origin := building().global_position if collector != null and building().kind == RTSBuilding.Kind.SUPPLY_DEPOT else Vector3.INF
+	# A registration callback can already have commanded this fresh collector.
+	# Harvest generations also detect commands that never needed a new move.
+	var rally_superseded := collector != null and (deployment_order != 0 or harvest_generation != 0)
 	unit.show()
 	# Visibility callbacks may remove the just-committed unit as well.
 	var rally_ok := not use_rally
-	var rally_superseded := false
-	if use_rally and is_instance_valid(unit) and is_instance_valid(field) and unit.order_version == deployment_order:
+	if is_instance_valid(collector) and collector.harvesting.generation != harvest_generation:
+		rally_superseded = true
+	if rally_superseded:
+		rally_ok = true
+	if use_rally and not rally_superseded and is_instance_valid(unit) and is_instance_valid(field) and unit.order_version == deployment_order:
 		rally_ok = field.order_deployed_unit(unit, destination)
 	elif is_instance_valid(unit) and unit.order_version != deployment_order:
 		rally_superseded = true
 		rally_ok = true # A visibility callback supplied a newer player command.
-	if not rally_superseded and is_instance_valid(unit) and is_instance_valid(field) and is_instance_valid(building()):
-		field.follow_deployment_rally(unit, building(), deployment_order + (1 if use_rally and rally_ok else 0))
+	if not rally_superseded and is_instance_valid(unit) and is_instance_valid(field):
+		var rally_increment := 1 if use_rally and rally_ok else 0
+		field.follow_deployment_rally(unit, building(), deployment_order + rally_increment, harvest_generation + rally_increment if collector != null else -1, collection_origin)
 	last_deployment = {"job_id": job.id, "unit_id": identity, "rally": destination, "rally_accepted": rally_ok}
 	if not rally_ok:
-		message = "Deployed; rally rejected (unit idle)"
+		message = "Deployed; rally rejected (clearing exit)" if collector != null and collection_origin.is_finite() else "Deployed; rally rejected (unit idle)"
 	_publish()
 	# Value identities remain valid even if a prior callback freed the unit/building.
 	if _wallet.active:

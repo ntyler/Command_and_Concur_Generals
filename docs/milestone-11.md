@@ -1,5 +1,7 @@
 # Milestone 11 — Supply Depots and Collector production
 
+The later [automatic harvesting update](automatic-harvesting.md) supersedes this milestone's prototype rule that newly produced collectors require a manual supply assignment. The original acceptance record below is retained as historical evidence.
+
 Status: **COMPLETE for Milestone 11 feature requirements.** All eight original feature acceptance groups below pass. The completed final matrix is **not passing**: 63 of 64 executions passed, with 8,110 checks and three failures in the headless projection fixture, phase exit 1. Movement regression acceptance remains unresolved with unknown failure attribution. No outstanding depot requirement remains. No human playtest has occurred.
 
 ## Playable scene

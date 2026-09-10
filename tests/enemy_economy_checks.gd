@@ -130,6 +130,9 @@ func _enemy_economy() -> void:
 	await _fresh_enemy(_enemy_settings(0, 75))
 	var ai := economy.enemy_controller
 	var trucks := _enemy_collectors()
+	# This wallet fixture measures only the explicitly assigned 75-supply cache.
+	# Local cache reselection is covered independently by automatic harvesting.
+	for truck in trucks: truck.collection_radius = 0.0
 	if not await _until(func() -> bool: return ai.harvest_assignments == 2, 2, "zero-credit opponent starts real automatic harvesting"): return
 	var generations := [trucks[0].harvesting.generation, trucks[1].harvesting.generation]
 	await _frames(60)

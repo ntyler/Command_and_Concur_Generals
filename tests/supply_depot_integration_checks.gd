@@ -139,15 +139,17 @@ func _earned_depot_loop() -> void:
 	if not is_instance_valid(produced): return
 	_check(economy.contains_unit(produced) and economy.collectors.has(produced) and produced.owner_id == 1 and produced.unit_id > 10 and produced.harvesting.cargo == 0 and produced.harvesting.state == CollectorHarvest.State.IDLE and produced.harvesting.cache_node() == null, "produced collector has fresh empty idle harvesting state, correct owner, stable identity and field membership")
 	_check(produced.movement_speed == 4.0 and produced.maximum_health == 150 and produced.combat.health.current == 150 and produced.combat.weapon == null and produced.cargo_capacity == 100 and produced.loading_amount == 25 and produced.loading_interval == 1.0 and produced.unloading_duration == 1.0, "produced truck preserves all existing movement, health, cargo and transfer defaults")
-	if not await _until(func() -> bool: return not produced.moving, 10, "normally produced collector physically arrives at its ground rally"): return
-	_check(produced.movement_state == RTSUnit.MovementState.ARRIVED and produced.global_position.distance_to(COLLECTOR_RALLY) <= produced.stopping_distance and produced.harvesting.cache_node() == null and economy.credits.balance(1) == 0, "ground rally performs no automatic harvesting assignment or income")
 	_record_earned(produced, ledger)
-	# Observe the normal produced collector through viewport selection and resource
-	# input. Existing harness events are automated input, not a human playtest.
+	var automatic_start: Array[Vector3] = []
+	produced.harvesting.changed.connect(func() -> void:
+		if produced.harvesting.automatic and automatic_start.is_empty(): automatic_start.append(produced.global_position)
+	)
+	if not await _until(func() -> bool: return not automatic_start.is_empty(), 12, "normally produced collector completes its rally and starts harvesting without another player command"): return
+	_check(automatic_start[0].distance_to(COLLECTOR_RALLY) <= produced.stopping_distance and produced.harvesting.cache_node() == cache and economy.credits.balance(1) == 0, "automatic assignment waits for physical rally arrival and gathering starts despite the zero-credit wallet")
+	# Existing harness events are automated viewport input, not a human playtest.
 	await _click(_screen(produced), MOUSE_BUTTON_LEFT)
 	_check(economy.selection.selected_units() == [produced], "viewport selects the normally produced collector")
-	await _click(_world_screen(cache.global_position + Vector3.UP), MOUSE_BUTTON_RIGHT)
-	_check(produced.harvesting.automatic and produced.harvesting.cache_node() == cache, "viewport resource command assigns the produced truck to the actual cache")
+	_check(produced.harvesting.automatic and produced.harvesting.cache_node() == cache, "selection preserves the produced truck's automatic cache assignment")
 	if not await _until(func() -> bool: return produced.harvesting.state == CollectorHarvest.State.RETURNING and produced.harvesting.cargo == 100, 15, "produced collector physically reaches cache and loads four unchanged 25-supply intervals"): return
 	if not await _prepare_return(produced): return
 	var depot_trip := await _measure_delivery(produced, depot, economy.headquarters, ledger, "depot", true)

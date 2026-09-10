@@ -418,7 +418,10 @@ func order_deployed_unit(unit: RTSUnit, destination: Vector3) -> bool:
 	return unit.move_to(destination)
 
 
-func follow_deployment_rally(unit: RTSUnit, source: RTSBuilding, expected_order: int) -> void:
+func follow_deployment_rally(unit: RTSUnit, source: RTSBuilding, expected_order: int, expected_harvest_generation: int = -1, collection_origin: Vector3 = Vector3.INF) -> void:
+	if is_instance_valid(unit) and unit is CollectorTruck and contains_unit(unit) and collection_origin.is_finite():
+		(unit as CollectorTruck).stage_deployment_collection(collection_origin, expected_order, expected_harvest_generation)
+		return
 	if not is_instance_valid(source) or source.kind != RTSBuilding.Kind.AIRFIELD or not is_instance_valid(unit) or not contains_unit(unit) or not unit.call("is_taking_off") or unit.order_version != expected_order:
 		return
 	# Weak references do not keep either source alive. A player order, including

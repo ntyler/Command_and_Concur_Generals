@@ -3,7 +3,7 @@ extends RefCounted
 ## Small per-collector order and inventory. Weak node references let a transfer
 ## finish reporting its committed value even when a synchronous listener frees nodes.
 
-enum State { IDLE, TO_SUPPLIES, LOADING, RETURNING, UNLOADING, BLOCKED }
+enum State { IDLE, TO_SUPPLIES, LOADING, RETURNING, UNLOADING, BLOCKED, WAITING }
 signal changed
 signal transferred(result: HarvestTransfer)
 
@@ -27,6 +27,9 @@ var _closed: bool = false
 var _failed_dropoffs: Array[int] = []
 var _alternative_used: bool = false
 var _pending_return: bool = false
+var collection_origin: Vector3 = Vector3.ZERO
+var _failed_caches: Array[int] = []
+const COLLECTION_RETRY_INTERVAL: float = 2.0
 
 
 func _init(unit: CollectorTruck) -> void:
@@ -97,9 +100,27 @@ func issue(target: Node3D, loop: bool) -> bool:
 	_cache = weakref(target) if loop else null
 	_hq = null if loop else weakref(target)
 	automatic = loop
+	if loop:
+		collection_origin = target.global_position # Only a deliberate assignment moves the area.
 	last_rejection = ""
 	_begin_trip(not loop or cargo >= unit.cargo_capacity)
 	return true # Historical acceptance survives synchronous replacements/deletion.
+
+
+func start_local_collection(origin: Vector3) -> bool:
+	var unit := unit_node()
+	if _closed or not is_instance_valid(unit) or not unit.gameplay_field is HarvestField or not origin.is_finite() or not _configured(unit) or not is_finite(unit.collection_radius) or unit.collection_radius < 0.0:
+		return false
+	var field := unit.gameplay_field as HarvestField
+	if not field.harvest_member(unit):
+		return false
+	interrupt()
+	_field = weakref(field)
+	_owner = unit.owner_id
+	collection_origin = origin
+	automatic = true
+	_select_supplies()
+	return true
 
 
 func interrupt() -> int:
@@ -114,6 +135,7 @@ func interrupt() -> int:
 	_access = {}
 	_elapsed = 0.0
 	_failed_dropoffs.clear()
+	_failed_caches.clear()
 	_alternative_used = false
 	_pending_return = false
 	automatic = false
@@ -160,15 +182,74 @@ func _begin_trip(returning: bool) -> void:
 		_stop_work("No owned drop-off · cargo retained", true)
 		return
 	var target: Node3D = cache_node()
-	if not is_instance_valid(target):
-		_stop_work("Destination unavailable", true)
+	if unit.navigation_suspended:
+		_wait_for_supplies()
+		return
+	if not field.contains_cache(target as SupplyCache) or (target as SupplyCache).depleted:
+		_select_supplies()
 		return
 	var access := field.plan_access(unit, target)
 	if access.is_empty():
-		_stop_work("Blocked · no reachable access", true)
+		_supply_failed()
 		return
 	_hq = null
 	_travel(access, false)
+
+
+func _select_supplies() -> void:
+	if not _live() or not automatic:
+		return
+	if cargo > 0:
+		_begin_trip(true) # A partial final load always reaches the wallet first.
+		return
+	var unit := unit_node()
+	var field := field_node()
+	if field.eligible_dropoffs(_owner).is_empty():
+		_stop_work("No owned drop-off · cargo retained", true)
+		return
+	var choice := field.choose_collection_cache(unit, collection_origin, unit.collection_radius, _failed_caches)
+	if choice.is_empty():
+		_wait_for_supplies()
+		return
+	_cache = weakref(choice["cache"])
+	_hq = null
+	_travel(choice["access"], false)
+
+
+func _supply_failed() -> void:
+	var cache := cache_node()
+	if is_instance_valid(cache) and cache.get_instance_id() not in _failed_caches:
+		_failed_caches.append(cache.get_instance_id())
+	_cache = null
+	_select_supplies()
+
+
+func _wait_for_supplies() -> void:
+	if not _live():
+		return
+	var unit := unit_node()
+	var field := field_node()
+	field.release_access(unit)
+	_cache = null
+	_hq = null
+	_access = {}
+	_elapsed = 0.0
+	state = State.WAITING
+	reason = "No nearby supplies"
+	var version := generation
+	# Retain automation while releasing the scarce access slot. Only ordinary
+	# movement parks the truck; no teleport, map-wide resource scan or wallet gate.
+	if unit.moving:
+		unit.halt_motion()
+		if version != generation or not _live():
+			return
+	if not unit.navigation_suspended:
+		var parking := field.collection_wait_point(unit)
+		if not parking.is_empty() and unit.global_position.distance_to(parking[0]) > unit.stopping_distance:
+			unit.harvest_move(parking[0])
+			if version != generation or not _live():
+				return
+	publish(version)
 
 
 func _start_return() -> void:
@@ -216,7 +297,7 @@ func _travel(access: Dictionary, returning: bool) -> void:
 		if returning:
 			_return_failed("Blocked · movement rejected")
 		else:
-			_stop_work("Blocked · movement rejected", true)
+			_supply_failed()
 	else:
 		publish(version)
 
@@ -254,6 +335,13 @@ func _tick(delta: float) -> void:
 		return
 	var unit := unit_node()
 	var field := field_node()
+	if state == State.WAITING:
+		_elapsed += delta
+		if _elapsed + 0.000001 >= COLLECTION_RETRY_INTERVAL and not unit.moving:
+			_elapsed = 0.0
+			_failed_caches.clear()
+			_select_supplies()
+		return
 	if _pending_return:
 		_start_return()
 		return
@@ -270,18 +358,14 @@ func _tick(delta: float) -> void:
 			if cargo > 0:
 				_begin_trip(true)
 			else:
-				_stop_work("Supply depleted or unavailable")
+				_select_supplies()
 			return
 	if state == State.TO_SUPPLIES or state == State.RETURNING:
 		if unit.movement_state == RTSUnit.MovementState.FAILED:
 			if state == State.RETURNING:
 				_return_failed("Blocked route")
 				return
-			# Preserve the mover's exhausted recovery history for diagnosis.
-			var version := interrupt()
-			state = State.BLOCKED
-			reason = "Blocked route · cargo retained"
-			publish(version)
+			_supply_failed()
 			return
 		if not unit.moving:
 			var target: Node3D = cache_node() if state == State.TO_SUPPLIES else hq
@@ -289,7 +373,7 @@ func _tick(delta: float) -> void:
 				if state == State.RETURNING:
 					_return_failed("Blocked interaction")
 				else:
-					_stop_work("Blocked interaction · cargo retained", true)
+					_supply_failed()
 				return
 			state = State.LOADING if state == State.TO_SUPPLIES else State.UNLOADING
 			reason = "Loading" if state == State.LOADING else "Unloading"
@@ -347,7 +431,7 @@ func complete_loading() -> HarvestTransfer:
 			if cargo > 0:
 				_begin_trip(true)
 			else:
-				_stop_work("Supply depleted")
+				_select_supplies()
 	return result
 
 
@@ -380,10 +464,13 @@ func complete_deposit() -> HarvestTransfer:
 	_transferring = false
 	if version == generation and _live():
 		var cache := cache_node()
-		if automatic and field_node().contains_cache(cache) and not cache.depleted:
-			_begin_trip(false)
+		if automatic:
+			if field_node().contains_cache(cache) and not cache.depleted:
+				_begin_trip(false)
+			else:
+				_select_supplies()
 		else:
-			_stop_work("Supply depleted" if automatic else "Deposit complete")
+			_stop_work("Deposit complete")
 	return result
 
 

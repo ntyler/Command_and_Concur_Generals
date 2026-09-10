@@ -51,6 +51,10 @@ func _fresh_harvest(supplies: int = 2000, starting: int = 1000) -> void:
 	root.add_child(harvest)
 	current_scene = harvest
 	harvest.camera_rig.edge_scrolling_enabled = false
+	# Legacy transfer fixtures isolate one explicitly selected cache. Automatic
+	# local reselection and the normal collection radius have dedicated coverage.
+	for truck in harvest.collectors:
+		truck.collection_radius = 0.0
 	# Successive fields share the viewport's World3D navigation map. A nonzero
 	# map iteration may still describe the departed region; wait for this field's
 	# region to own both collector starts before issuing navigation-dependent work.
@@ -142,7 +146,7 @@ func _loop_checks() -> void:
 	_check(work.cargo == 100 and cache.remaining == 25 and harvest.credits.balance(1) == 0, "full cargo leaves supply but remains unspendable before unloading")
 	await _frames(58)
 	_check(work.cargo == 100 and harvest.credits.balance(1) == 0, "unloading cannot credit before its full duration")
-	await _until(func() -> bool: return work.state == CollectorHarvest.State.IDLE and harvest.credits.balance(1) == 125, 22, "second trip deposits partial final load then becomes idle")
+	await _until(func() -> bool: return work.state == CollectorHarvest.State.WAITING and harvest.credits.balance(1) == 125, 22, "second trip deposits partial final load then waits for nearby supplies")
 	_check(transfers.size() == 7, "exactly five load intervals and two deposits")
 	var loads: Array[Dictionary] = []
 	var deposits: Array[Dictionary] = []
@@ -160,9 +164,9 @@ func _loop_checks() -> void:
 	for i in range(1, 4):
 		_check(loads[i]["tick"] - loads[i - 1]["tick"] == 60, "successive loading intervals each require 60 simulated ticks")
 	_check(cache.remaining == 0 and cache.depleted and not cache._goods.visible and cache.get_rid() == footprint_id and cache.collision_layer != 0, "depletion changes presentation while retaining collision footprint")
-	_check(work.cargo == 0 and harvest.caches[1].remaining == 125 and harvest._access_claims.is_empty(), "depletion releases claims and never searches another cache")
+	_check(work.cargo == 0 and harvest.caches[1].remaining == 125 and harvest._access_claims.is_empty() and work.reason == "No nearby supplies", "depletion releases claims and leaves the cache outside the configured collection area untouched")
 	await _frames(120)
-	_check(harvest.credits.balance(1) == 125 and work.state == CollectorHarvest.State.IDLE, "empty collector remains idle with no repeated deposit")
+	_check(harvest.credits.balance(1) == 125 and work.state == CollectorHarvest.State.WAITING, "empty collector waits with no repeated deposit")
 
 
 func _quantity_checks() -> void:
@@ -189,10 +193,10 @@ func _quantity_checks() -> void:
 		await _frames(1)
 		bounded = bounded and first.harvesting.cargo >= 0 and first.harvesting.cargo <= 100 and second.harvesting.cargo >= 0 and second.harvesting.cargo <= 100 and harvest.caches[0].remaining >= 0 and harvest.credits.balance(1) >= 0
 		separate = separate or first.harvesting.cargo != second.harvesting.cargo
-		if first.harvesting.state == CollectorHarvest.State.IDLE and second.harvesting.state == CollectorHarvest.State.IDLE: break
+		if first.harvesting.state == CollectorHarvest.State.WAITING and second.harvesting.state == CollectorHarvest.State.WAITING: break
 	_check(bounded and separate, "cargo is bounded, nonnegative and independent per collector")
 	_check(ledger["loaded"] == 225 and ledger["deposited"] == 225 and harvest.credits.balance(1) == 225 and ledger["coherent"], "two collectors conserve every supply across loading and deposits")
-	_check(first.harvesting.state == CollectorHarvest.State.IDLE and second.harvesting.state == CollectorHarvest.State.IDLE and harvest._access_claims.is_empty(), "both collectors terminate the finite loop and release claims")
+	_check(first.harvesting.state == CollectorHarvest.State.WAITING and second.harvesting.state == CollectorHarvest.State.WAITING and harvest._access_claims.is_empty(), "both collectors exhaust their local source and release claims while waiting")
 	# A non-multiple exercises a contested partial final interval, not just partial cargo.
 	await _fresh_harvest(30, 0)
 	first = _select_collector()
@@ -204,7 +208,7 @@ func _quantity_checks() -> void:
 			if result.kind == HarvestTransfer.Kind.LOAD: amounts.append(result.amount)
 		)
 	_check(_complete(harvest.issue_harvest(harvest.caches[0])), "contested 30-supply cache accepts two recipients")
-	await _until(func() -> bool: return harvest.credits.balance(1) == 30 and first.harvesting.state == CollectorHarvest.State.IDLE and second.harvesting.state == CollectorHarvest.State.IDLE, 22, "contested partial remainder deposits once")
+	await _until(func() -> bool: return harvest.credits.balance(1) == 30 and first.harvesting.state == CollectorHarvest.State.WAITING and second.harvesting.state == CollectorHarvest.State.WAITING, 22, "contested partial remainder deposits once")
 	amounts.sort()
 	_check(amounts == [5, 25] and harvest.caches[0].remaining == 0, "only one collector receives the final five supplies")
 	await _fresh_harvest(52, 0)
@@ -218,7 +222,7 @@ func _quantity_checks() -> void:
 	if not _complete(capacity_order):
 		print("HARVEST_CAPACITY_REJECTION: intended=%s accepted=%s superseded=%s reason=%s current_region_ready=%s selected=%s" % [capacity_order.intended_ids, capacity_order.accepted_ids, capacity_order.superseded, first.harvesting.last_rejection, _current_harvest_navigation(), harvest.selection.selected_units() == [first]])
 	_check(_complete(capacity_order), "non-multiple capacity configuration accepts harvesting")
-	await _until(func() -> bool: return harvest.credits.balance(1) == 52 and first.harvesting.state == CollectorHarvest.State.IDLE, 30, "configured capacity makes two real collection trips")
+	await _until(func() -> bool: return harvest.credits.balance(1) == 52 and first.harvesting.state == CollectorHarvest.State.WAITING, 30, "configured capacity makes two real collection trips")
 	_check(bounded_loads == [25, 10, 17] and first.harvesting.cargo == 0, "transfers clamp independently to interval amount, remaining capacity and final cache contents")
 
 
@@ -332,7 +336,7 @@ func _transfer_callback_checks() -> void:
 				_check(not is_instance_valid(truck) and work.last_transfer.amount == 25 and harvest.credits.balance(1) == 0 and harvest._access_claims.is_empty(), "immediate free leaves a historical load result without credit or reservation")
 			"free_cache":
 				_check(work.cargo == 25 and work.state == CollectorHarvest.State.RETURNING, "source freed in load callback returns committed cargo")
-				await _until(func() -> bool: return harvest.credits.balance(1) == 25 and work.state == CollectorHarvest.State.IDLE, 12, "departed-source partial cargo deposits exactly once")
+				await _until(func() -> bool: return harvest.credits.balance(1) == 25 and work.state == CollectorHarvest.State.WAITING, 12, "departed-source partial cargo deposits exactly once before waiting")
 			"free_hq":
 				_check(work.state == CollectorHarvest.State.BLOCKED and work.cargo == 25 and harvest.credits.balance(1) == 0, "HQ freed in load callback blocks without losing cargo")
 		if is_instance_valid(cache) and cache.changed.is_connected(on_load): cache.changed.disconnect(on_load)
@@ -372,7 +376,7 @@ func _transfer_callback_checks() -> void:
 				_check(work.state == CollectorHarvest.State.IDLE and work.cargo == 0 and harvest._access_claims.is_empty(), "deposit callback detachment leaves no obsolete work")
 				harvest.add_child(truck)
 			"free_collector": _check(not is_instance_valid(truck) and harvest._access_claims.is_empty(), "collector free during deposit clears its reservation")
-			"free_cache", "free_hq": _check(work.state == CollectorHarvest.State.IDLE or work.state == CollectorHarvest.State.BLOCKED, "removed destination prevents old deposit continuation: " + action)
+			"free_cache", "free_hq": _check(work.state in [CollectorHarvest.State.WAITING, CollectorHarvest.State.BLOCKED], "removed destination prevents old deposit continuation: " + action)
 			"free_field": _check(not is_instance_valid(harvest) and not wallet.active, "scene free during wallet notification safely deactivates the same wallet")
 		wallet.changed.disconnect(on_credit)
 
@@ -409,9 +413,10 @@ func _harvest_lifecycle_checks() -> void:
 	var cache := harvest.caches[0]
 	harvest.remove_child(cache)
 	await _frames(2)
-	_check(work.state == CollectorHarvest.State.IDLE and work.cargo == 0 and not truck.moving and not harvest.contains_cache(cache), "empty collector cancels when its source departs")
+	_check(work.state == CollectorHarvest.State.WAITING and work.cargo == 0 and not harvest.contains_cache(cache) and harvest._access_claims.is_empty(), "empty collector waits without access claims when its only local source departs")
 	harvest.add_child(cache)
-	_check(harvest.contains_cache(cache) and cache.remaining == 100 and work.state == CollectorHarvest.State.IDLE, "cache re-entry restores membership without restarting old work")
+	_check(harvest.contains_cache(cache) and cache.remaining == 100, "cache re-entry restores source membership and contents")
+	await _until(func() -> bool: return work.cache_node() == cache and work.state == CollectorHarvest.State.TO_SUPPLIES, 3, "bounded local retry resumes collection when the source re-enters")
 	cache.queue_free()
 	_check(not harvest.issue_harvest(cache).has_acceptance(), "queued cache cannot accept a new command")
 	await _frames(3)
