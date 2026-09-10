@@ -41,15 +41,14 @@ func _ready() -> void:
 	turret.name = "Turret"
 	turret.position.y = building_height + 0.42
 	add_child(turret)
+	var key := "air_defense" if _air_defense() else "ground_defense"
+	var parts: Array[String] = []
 	if _air_defense():
-		_turret_box(Vector3(1.5, 0.75, 1.5), Vector3.ZERO, Color("34446b"))
-		_turret_box(Vector3(1.8, 0.16, 1.2), Vector3(0, 0.46, 0), AIR_RANGE_COLOR)
-		for side in [-1.0, 1.0]:
-			_turret_box(Vector3(0.28, 0.3, 1.8), Vector3(side * 0.58, 0.12, -1.1), Color("c7e8ff"))
+		parts.assign(["TURRET", "HOUSECOLOR02"])
 	else:
-		_turret_box(Vector3(2.2, 0.65, 1.8), Vector3.ZERO, Color("263c49"))
-		_turret_box(Vector3(1.65, 0.14, 1.35), Vector3(0, 0.39, 0), RANGE_COLOR)
-		_turret_box(Vector3(0.35, 0.28, 1.45), Vector3(0, 0.15, -1.18), Color("b2d0c0"))
+		parts.assign(["TURRET", "BARRELS", "HOUSECOLOR01", "HOUSECOLOR02"])
+	var model := GeneralsVisuals.create(key, Vector3(2.2, 0.95, 2.9), owner_id, true, 0.0, false, parts)
+	turret.add_child(model)
 	_muzzle = Marker3D.new()
 	_muzzle.name = "Muzzle"
 	_muzzle.position = Vector3(0, 0.15, -1.91)

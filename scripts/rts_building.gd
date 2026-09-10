@@ -126,35 +126,17 @@ func _build_geometry() -> void:
 	collider.shape = box
 	collider.position.y = building_height / 2.0
 	add_child(collider)
-	_mesh(box.size, collider.position, Color("547c83") if owner_id == 1 else Color("aa655f"))
-	_mesh(Vector3(footprint.x - 0.4, 0.12, footprint.y - 0.4), Vector3(0, building_height + 0.06, 0), Color("adc9ba"))
-	# Painted door and trim stay inside the solid's footprint.
-	_mesh(Vector3(0.02, 1.4, 1.5), Vector3(footprint.x / 2.0 + 0.005, 0.7, 0), Color("263c49"))
-	if kind == Kind.VEHICLE_FACTORY:
-		# Broad garage door and raised roof rails distinguish the factory at game zoom.
-		_mesh(Vector3(0.025, 2.0, 3.2), Vector3(footprint.x / 2.0 + 0.01, 1, 0), Color("263c49"))
-		for z in [-1.5, 1.5]:
-			_mesh(Vector3(footprint.x - 0.8, 0.35, 0.35), Vector3(0, building_height + 0.2, z), Color("e8b86c"))
-	elif kind == Kind.SUPPLY_DEPOT:
-		# Low warehouse with three gold cargo stacks and a mint loading face.
-		# All decorative solids stay inside the authoritative X/Z footprint.
-		for x in [-1.7, 0.0, 1.7]:
-			_mesh(Vector3(1.2, 0.6, 1.5), Vector3(x, building_height + 0.4, 0), Color("dfbc70"))
-		_mesh(Vector3(footprint.x - 0.8, 0.22, 0.04), Vector3(0, 1.0, -footprint.y / 2.0 + 0.02), Color("86ffcb"))
-	elif kind == Kind.POWER_PLANT:
-		# Original twin transformer stacks and a transverse gold bus, within the
-		# authoritative footprint. The ordinary solid governs movement and fire.
-		for x in [-1.4, 1.4]:
-			_mesh(Vector3(1.15, 0.45, 2.6), Vector3(x, building_height + 0.28, 0), Color("edc45f"))
-			for z in [-0.85, 0.0, 0.85]:
-				_mesh(Vector3(1.5, 0.12, 0.22), Vector3(x, building_height + 0.56, z), Color("fff0b0"))
-		_mesh(Vector3(4.5, 0.25, 0.3), Vector3(0, building_height + 0.78, 0), Color("edc45f"))
-	elif kind == Kind.AIRFIELD:
-		# Flat visible pad; all raised trim is outside the central launch sphere.
-		_mesh(Vector3(4.4, 0.025, 3.6), Vector3(0, building_height + 0.135, 0), Color("243e53"))
-		for x in [-0.7, 0.7]:
-			_mesh(Vector3(0.18, 0.02, 1.7), Vector3(x, building_height + 0.16, 0), Color("8de9ef"))
-		_mesh(Vector3(1.4, 0.02, 0.18), Vector3(0, building_height + 0.16, 0), Color("8de9ef"))
+	var keys := {Kind.HEADQUARTERS: "headquarters", Kind.BARRACKS: "barracks",
+		Kind.VEHICLE_FACTORY: "vehicle_factory", Kind.SUPPLY_DEPOT: "supply_depot",
+		Kind.POWER_PLANT: "power_plant", Kind.AIRFIELD: "airfield",
+		Kind.GROUND_DEFENSE_BATTERY: "ground_defense", Kind.AIR_DEFENSE_BATTERY: "air_defense"}
+	var included: Array[String] = []
+	if kind == Kind.GROUND_DEFENSE_BATTERY:
+		included = ["BASE", "HOUSECOLOR03", "HOUSECOLOR04"]
+	elif kind == Kind.AIR_DEFENSE_BATTERY:
+		included = ["CHASSIS", "HOUSECOLOR01"]
+	var visual := GeneralsVisuals.create(keys.get(kind, "barracks"), box.size, owner_id, false, 0.0, not included.is_empty(), included)
+	add_child(visual)
 
 
 func _physics_process(delta: float) -> void:

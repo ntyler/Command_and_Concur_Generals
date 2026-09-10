@@ -171,11 +171,13 @@ func _ready() -> void:
 
 
 func _build_visual() -> void:
-	_add_box(Vector3(0.85, 0.45, 1.1), Vector3(0, 0.52, 0), Color("42c5cc"))
-	_add_box(Vector3(0.55, 0.22, 0.55), Vector3(0, 0.85, 0.1), Color("b3e7df"))
-	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(-0.5, 0.28, 0), Color("263c49"))
-	_add_box(Vector3(0.22, 0.32, 1.25), Vector3(0.5, 0.28, 0), Color("263c49"))
-	_add_box(Vector3(0.48, 0.09, 0.15), Vector3(0, 0.8, -0.42), Color("ffd680"))
+	var key := "tank"
+	if combat_weapon != null:
+		key = "rifle" if combat_weapon.mode == WeaponDefinition.Mode.HITSCAN else "rocket_vehicle"
+	var size := Vector3(1.15, 1.4, 1.7)
+	if key == "rifle":
+		size = Vector3(1.2, 1.45, 1.0)
+	_visual.add_child(GeneralsVisuals.create(key, size, owner_id))
 
 
 func set_selected(selected: bool) -> void:

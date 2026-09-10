@@ -15,12 +15,30 @@ var _fire_segment: MeshInstance3D
 var _fire_contact: MeshInstance3D
 var _launch_volume: MeshInstance3D
 var _body_materials: Array[StandardMaterial3D] = []
+var _team_materials: Array[StandardMaterial3D] = []
+var _team_shaders: Array[ShaderMaterial] = []
 
 
 func _ready() -> void:
-	for child in unit._visual.get_children(): # Construction only, never a physics search.
-		if child is MeshInstance3D:
-			_body_materials.append(child.material_override as StandardMaterial3D)
+	# Cache descendants once: imported art adds a hierarchy below the unit visual.
+	for child in unit._visual.find_children("*", "MeshInstance3D", true, false):
+		var mesh := child as MeshInstance3D
+		if mesh.has_meta("generals_team_shader"):
+			_team_shaders.append(mesh.material_override as ShaderMaterial)
+			continue
+		var source := mesh.get_active_material(0) as StandardMaterial3D
+		if source == null:
+			continue
+		var material := mesh.material_override as StandardMaterial3D
+		if material == null:
+			material = source.duplicate() as StandardMaterial3D
+			mesh.material_override = material
+		material.set_meta("original_emission_enabled", material.emission_enabled)
+		material.set_meta("original_emission", material.emission)
+		material.set_meta("original_emission_energy", material.emission_energy_multiplier)
+		_body_materials.append(material)
+		if str(mesh.name).begins_with("HOUSECOLOR") or source.resource_name.begins_with("HouseColor") or mesh.get_parent() == unit._visual:
+			_team_materials.append(material)
 	health_bar = WorldHealthBar.new()
 	health_bar.position.y = 1.65
 	add_child(health_bar)
@@ -40,8 +58,15 @@ func _ready() -> void:
 
 
 func _refresh_team() -> void:
-	for material in _body_materials:
+	for material in _team_materials:
 		material.albedo_color = TeamRules.team_color(unit.owner_id)
+	for material in _body_materials:
+		material.emission_enabled = material.get_meta("original_emission_enabled")
+		material.emission = material.get_meta("original_emission")
+		material.emission_energy_multiplier = material.get_meta("original_emission_energy")
+	for material in _team_shaders:
+		material.set_shader_parameter("team_color", TeamRules.team_color(unit.owner_id))
+		material.set_shader_parameter("hit_flash", 0.0)
 
 
 func _refresh_health() -> void:
@@ -70,7 +95,11 @@ func _on_damaged(_amount: float, _source: Node) -> void:
 	_refresh_health()
 	flash_remaining = 0.12
 	for material in _body_materials:
-		material.albedo_color = Color.WHITE
+		material.emission_enabled = true
+		material.emission = Color.WHITE
+		material.emission_energy_multiplier = 1.0
+	for material in _team_shaders:
+		material.set_shader_parameter("hit_flash", 1.0)
 	set_physics_process(true)
 
 

@@ -1,0 +1,306 @@
+{
+  "airfield": {
+    "model": "abarfrccmd",
+    "source": "data/source/generals/w3d/art/w3d/abarfrccmd.w3d",
+    "source_sha256": "8889ee32d51df61d198ce0acd01fc422d216100e7c692d1d508ad29a638b6e25",
+    "output_sha256": "a7d2cd258cec651a06e6fa8a92060821dcb14796b28d55c373a0182e7cd73762",
+    "bounds_min": [
+      -73.450439453125,
+      -0.19758793711662292,
+      -113.2978286743164
+    ],
+    "bounds_max": [
+      73.46929168701172,
+      73.1820068359375,
+      112.59505462646484
+    ],
+    "warnings": [
+      "Additional material passes retained in source",
+      "Blended non-solid effect retained in source",
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "barracks": {
+    "model": "abbarracks",
+    "source": "data/source/generals/w3d/art/w3d/abbarracks.w3d",
+    "source_sha256": "38f9645f4e3229d5cd56a681f17d0e7d886ac69ff320e413fda6bed511cdd30c",
+    "output_sha256": "30cf40ad2b25203ad38bfb575e7a29b5e3222864f38c9b701e747860c26e556c",
+    "bounds_min": [
+      -44.061767578125,
+      -4.390473051785193e-08,
+      -55.17411804199219
+    ],
+    "bounds_max": [
+      44.061767578125,
+      48.882659912109375,
+      55.17411804199219
+    ],
+    "warnings": [
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "headquarters": {
+    "model": "abbtcmdhq",
+    "source": "data/source/zero_hour/w3dzh/art/w3d/abbtcmdhq.w3d",
+    "source_sha256": "d6932818632f9515a7c9a21c0c5ab1ae091331561df04f281470319402640257",
+    "output_sha256": "4f4f9443a557e7ea75016dcb06213097572b2e1d7e9cd2490379d2836009b9a1",
+    "bounds_min": [
+      -64.7627182006836,
+      -0.22609281539916992,
+      -54.37432861328125
+    ],
+    "bounds_max": [
+      65.04635620117188,
+      51.913909912109375,
+      54.036094665527344
+    ],
+    "warnings": [
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "air_defense": {
+    "model": "abpatriot",
+    "source": "data/source/generals/w3d/art/w3d/abpatriot.w3d",
+    "source_sha256": "47571584eac784dd632ca6089ba17188530e5e503782312ae67a75f1f774a7ed",
+    "output_sha256": "a01fe3be3c7fa6ffb09f49e666bfb827b3fc140f5626958da1a659ca08648f5b",
+    "bounds_min": [
+      -9.459307704120874,
+      -0.019832134246826172,
+      -9.80962884426117
+    ],
+    "bounds_max": [
+      9.08535286411643,
+      16.057458877563477,
+      8.277845025062561
+    ],
+    "warnings": []
+  },
+  "power_plant": {
+    "model": "abpwrplant",
+    "source": "data/source/generals/w3d/art/w3d/abpwrplant.w3d",
+    "source_sha256": "22ea3f0254be747ab2c160f541cb94ab8e2b2790314b64fbfea780b23e07abb0",
+    "output_sha256": "cf9fe0d7b5a45898b5b161d72e76573954f922d709621a6355cbc742c0390a1e",
+    "bounds_min": [
+      -31.63511848449707,
+      0.0,
+      -22.82587432861328
+    ],
+    "bounds_max": [
+      30.31245231628418,
+      41.83273696899414,
+      22.87811279296875
+    ],
+    "warnings": [
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "wall_support": {
+    "model": "absecwallx",
+    "source": "data/source/zero_hour/w3dzh/art/w3d/absecwallx.w3d",
+    "source_sha256": "f8fb01bc01736919f71cd6a3d25f5f80fb5cf1c2435aab670e5a0ee2a01ef9db",
+    "output_sha256": "4d2ab3bc4e5b57f55fc75526a5d542e2ef6b39a22c2c77d1ba0a4b19da9ad2f5",
+    "bounds_min": [
+      -3.2780001163482666,
+      -1.9842720031738281,
+      -3.2780001163482666
+    ],
+    "bounds_max": [
+      3.2780001163482666,
+      9.698484420776367,
+      3.2780001163482666
+    ],
+    "warnings": []
+  },
+  "wall": {
+    "model": "absecwally",
+    "source": "data/source/zero_hour/w3dzh/art/w3d/absecwally.w3d",
+    "source_sha256": "8ab4404ed9fafeedcf5f36316c0c12bf1e05b6fbe7bfc6553f724a4d4932480b",
+    "output_sha256": "6aa00971e887b7528b4ef643cc423ad80bc349b589e8737cb664c9533eab82ff",
+    "bounds_min": [
+      -1.0270854234695435,
+      -1.943321704864502,
+      -10.116010189056396
+    ],
+    "bounds_max": [
+      1.34507417678833,
+      8.166961789131165,
+      10.047346591949463
+    ],
+    "warnings": [
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "supply_depot": {
+    "model": "absupplyct",
+    "source": "data/source/generals/w3d/art/w3d/absupplyct.w3d",
+    "source_sha256": "ea8aba4e9839051add01497f9cab8ea2dc239809bf991651f45538a7b0ed259a",
+    "output_sha256": "7a6731ab88ed3bf52947459643c24f8dbcfbb29b3ad75265d13be599a624d66b",
+    "bounds_min": [
+      -42.17082977294922,
+      -0.24130773544311523,
+      -46.505714416503906
+    ],
+    "bounds_max": [
+      56.834068298339844,
+      47.3127326965332,
+      40.541805267333984
+    ],
+    "warnings": [
+      "Blended non-solid effect retained in source",
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "vehicle_factory": {
+    "model": "abwarfact",
+    "source": "data/source/generals/w3d/art/w3d/abwarfact.w3d",
+    "source_sha256": "a35032936fca4dd667a7a76fe327f0acb802d27c3e95d7d87d363ae3f6c39e2d",
+    "output_sha256": "f9c4d275817350051f5da6b317dd115286c4043e50fc66fed8c1b328839e17de",
+    "bounds_min": [
+      -58.20063018798828,
+      -1.0143359899520874,
+      -65.83126449584961
+    ],
+    "bounds_max": [
+      63.78783416748047,
+      48.062171936035156,
+      47.142845153808594
+    ],
+    "warnings": [
+      "Blended non-solid effect retained in source",
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "rifle": {
+    "model": "airngr_skn",
+    "source": "data/source/generals/w3d/art/w3d/airngr_skn.w3d",
+    "source_sha256": "6b30f7f480fd28587b941ec22060d46cf8961444a4583162ffe3e78fcb8d7175",
+    "output_sha256": "27653aedc6c96f8b00c678aade7aa5d5d78ca0de3ed4c79b34571ffd2244b2db",
+    "bounds_min": [
+      -2.384296104816121,
+      0.014133464399673556,
+      -3.4551891163020256
+    ],
+    "bounds_max": [
+      3.404302301436192,
+      14.445459823112495,
+      6.288425543358718
+    ],
+    "warnings": [
+      "Blended non-solid effect retained in source",
+      "Static first frame of original AIRngr_STA standing animation"
+    ]
+  },
+  "tank": {
+    "model": "avcrusader",
+    "source": "data/source/zero_hour/w3dzh/art/w3d/avcrusader.w3d",
+    "source_sha256": "e8d404d2c5e85fc7670b170010d3b7536f8781aa3e6feb56b52de67af7b826e6",
+    "output_sha256": "3ba30ae414f6b512434e2d7403cb6c410dfc2745db827cb66908fef420f3c54c",
+    "bounds_min": [
+      -8.731208324432373,
+      -0.025889873504638672,
+      -23.590301871299744
+    ],
+    "bounds_max": [
+      8.637991428375244,
+      8.811879396438599,
+      12.760041236877441
+    ],
+    "warnings": [
+      "Blended non-solid effect retained in source"
+    ]
+  },
+  "rocket_vehicle": {
+    "model": "avtomahawk",
+    "source": "data/source/generals/w3d/art/w3d/avtomahawk.w3d",
+    "source_sha256": "3cee0c4c13bfa740b8550a5ee4bd39c6b5f37fec0c6432cdbb8a469e7a231364",
+    "output_sha256": "ba2cb4e4303a76754aa4602c59d17bebb97a0706bd1e00d024a5777b87b9adf7",
+    "bounds_min": [
+      -9.10062069632113,
+      -0.029310941696166992,
+      -13.882638931274414
+    ],
+    "bounds_max": [
+      7.586553862318397,
+      14.487403750419617,
+      12.27177619934082
+    ],
+    "warnings": []
+  },
+  "ground_defense": {
+    "model": "nbgattling",
+    "source": "data/source/generals/w3d/art/w3d/nbgattling.w3d",
+    "source_sha256": "ad0f83cdb28e89a803251bafcca68abaff156bea2c88c9570d6701687aadb5a7",
+    "output_sha256": "aad856fe2f336cd1020cc6a359d9377e6ce6da6cbe286271925bd5d6f76760a3",
+    "bounds_min": [
+      -9.380660286096946,
+      -0.21560096740722656,
+      -10.714327531782697
+    ],
+    "bounds_max": [
+      9.25530950746262,
+      15.766905784606934,
+      9.799697834214449
+    ],
+    "warnings": [
+      "Hidden mesh retained in source",
+      "Static rest pose; animation retained in source"
+    ]
+  },
+  "collector": {
+    "model": "nvssupplytk",
+    "source": "data/source/generals/w3d/art/w3d/nvssupplytk.w3d",
+    "source_sha256": "2593b336fd6deb508bc0cca66ed5aeeb18f900b4f7c98f5285c25afa729d61e8",
+    "output_sha256": "3f833bec5476befda2551cd986bfe0f9b1fb082144f20f6be09e0d6aea5798a8",
+    "bounds_min": [
+      -7.946267604827881,
+      0.07300448417663574,
+      -17.255760192871094
+    ],
+    "bounds_max": [
+      7.946267604827881,
+      15.569103240966797,
+      17.255760192871094
+    ],
+    "warnings": [
+      "Blended non-solid effect retained in source"
+    ]
+  },
+  "supplies": {
+    "model": "zbsmalpile",
+    "source": "data/source/generals/w3d/art/w3d/zbsmalpile.w3d",
+    "source_sha256": "ba2262f54c491b21cd933e9ca21ccb0d0e0abce97a66da281da5cd41faa51354",
+    "output_sha256": "94c0639ec35440e86b43d5f60c8a2efb6a9d100395c546556afa6578c7106eea",
+    "bounds_min": [
+      -12.43203360577336,
+      -0.04042243957519531,
+      -11.799401324876671
+    ],
+    "bounds_max": [
+      11.38620924949646,
+      9.451716423034668,
+      11.661388553975245
+    ],
+    "warnings": []
+  },
+  "helicopter": {
+    "model": "avcomanche",
+    "source": "data/source/generals/w3d/art/w3d/avcomanche.w3d",
+    "source_sha256": "01d791cf5cd36e3b35c6962c67e2f09d591089c20b0d9cda4e015f590cd3186c",
+    "output_sha256": "ad5cec41544e80598cb790e386e8e6ca3a9f66aefb062678da7059648a41fda7",
+    "bounds_min": [
+      -26.029102887556412,
+      0.24585324796391805,
+      -25.27546448664428
+    ],
+    "bounds_max": [
+      25.454057329759465,
+      11.477460425435696,
+      26.594751358032227
+    ],
+    "warnings": [
+      "Additional material passes retained in source",
+      "Blended non-solid effect retained in source",
+      "Static rest pose; animation retained in source"
+    ]
+  }
+}

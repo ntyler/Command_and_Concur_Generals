@@ -17,7 +17,7 @@ var _transition_owner: int = 0
 var _rollback: bool = false
 var _status: String = "Closed"
 var _door_collider: CollisionShape3D
-var _door_visual: MeshInstance3D
+var _door_visual: Node3D
 var _navigation: ConstructionNavigation
 var _reenter_needs_navigation: bool = false
 
@@ -43,7 +43,7 @@ func _build_geometry() -> void:
 		_solid(_oriented(Vector2(support, size.y)).abs(), offset, Color("a3b6ad"))
 	var door_size := _oriented(Vector2(definition.gate_opening, size.y)).abs()
 	_door_collider = _solid(door_size, Vector2.ZERO, Color("5e797b"))
-	_door_visual = get_child(get_child_count() - 1) as MeshInstance3D
+	_door_visual = get_child(get_child_count() - 1) as Node3D
 	_set_physical(physical_open)
 
 
@@ -51,14 +51,17 @@ func _oriented(value: Vector2) -> Vector2:
 	return Vector2(value.y, value.x) if orientation_degrees == 90 else value
 
 
-func _solid(size: Vector2, offset: Vector2, color: Color) -> CollisionShape3D:
+func _solid(size: Vector2, offset: Vector2, _color: Color) -> CollisionShape3D:
 	var collider := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(size.x, building_height, size.y)
 	collider.shape = box
 	collider.position = Vector3(offset.x, building_height / 2.0, offset.y)
 	add_child(collider)
-	_mesh(box.size, collider.position, color if owner_id == 1 else color.lerp(Color("b46c62"), 0.6))
+	var key := "wall_support" if maxf(size.x, size.y) < 1.1 else "wall"
+	var visual := GeneralsVisuals.create(key, box.size, owner_id, false, PI / 2.0 if size.x > size.y else 0.0, true)
+	visual.position += Vector3(offset.x, 0, offset.y)
+	add_child(visual)
 	return collider
 
 

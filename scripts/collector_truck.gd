@@ -28,12 +28,7 @@ func _ready() -> void:
 
 
 func _build_visual() -> void:
-	_add_box(Vector3(0.85, 0.25, 1.5), Vector3(0, 0.38, 0), TeamRules.team_color(owner_id))
-	_add_box(Vector3(0.8, 0.6, 0.6), Vector3(0, 0.8, -0.46), Color("b3e7df") if owner_id == 1 else Color("efb5a9"))
-	_add_box(Vector3(0.78, 0.35, 0.75), Vector3(0, 0.67, 0.33), Color("ffd680"))
-	for x in [-0.46, 0.46]:
-		for z in [-0.5, 0.5]:
-			_add_box(Vector3(0.22, 0.32, 0.32), Vector3(x, 0.24, z), Color("263c49"))
+	_visual.add_child(GeneralsVisuals.create("collector", Vector3(1.15, 1.15, 1.8), owner_id))
 
 
 func move_to(destination: Vector3, combat_pursuit: bool = false, preserve_attack_move: bool = false) -> bool:

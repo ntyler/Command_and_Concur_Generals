@@ -1,5 +1,7 @@
 # Fieldwork — RTS prototype
 
+**Generals art:** the existing units and buildings use imported game models. Open [Generals Object Library](scenes/generals_asset_browser.tscn) and press **F6** to browse the local collection of 7,671 static previews. See [asset setup, mappings and limitations](docs/generals-assets.md).
+
 **Build-area clarity and Pause:** play [Fortified Assault](scenes/fortified_assault.tscn) with **F6**, or launch `--path . res://scenes/fortified_assault.tscn`. Builder matches now use the supported terrain boundary, retaining the existing map clearance, obstacle, delivery-access and reachable-work-position checks. The green placement guide matches validation; bright red segments mark the exact unsupported clearance or access edge. The original F5 controls field remains unchanged. See the [implementation and validation report](docs/build-area-pause.md).
 
 In an active match, **Esc opens Pause**, cancelling only uncommitted placement/targeting and closing Help. **Esc or Resume** continues the same paid work and accepted orders. **Restart Match** and **Quit to Desktop** require confirmation; Esc in a confirmation returns to Pause. Right-click cancels a preview/targeting mode without pausing. A finished match keeps its existing result screen and Restart.

@@ -20,6 +20,8 @@ func refresh_construction() -> void:
 		return
 	_refresh_health()
 	for child in get_children():
+		if child is Node3D and child.has_meta("generals_visual"):
+			GeneralsVisuals.show_construction(child, operational)
 		if child is MeshInstance3D and child != selection_indicator and child != rally_indicator:
 			var material := child.material_override as StandardMaterial3D
 			if material != null:

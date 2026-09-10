@@ -16,7 +16,7 @@ var changed: Signal:
 var remaining: int = 0
 var depleted: bool:
 	get: return remaining == 0
-var _goods: MeshInstance3D
+var _goods: Node3D
 var _label: Label3D
 var movement_debug: bool = false
 
@@ -32,7 +32,9 @@ func _ready() -> void:
 	collider.position.y = 0.75
 	add_child(collider)
 	_box(Vector3(footprint.x, 0.3, footprint.y), Vector3(0, 0.15, 0), Color("677778"))
-	_goods = _box(Vector3(footprint.x - 0.4, 1.2, footprint.y - 0.4), Vector3(0, 0.9, 0), Color("d6ad55"))
+	_goods = GeneralsVisuals.create("supplies", Vector3(footprint.x - 0.4, 1.2, footprint.y - 0.4))
+	_goods.position.y += 0.3
+	add_child(_goods)
 	_label = Label3D.new()
 	_label.position.y = 2.4
 	_label.font_size = 32

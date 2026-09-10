@@ -1,2 +1,4 @@
 .godot/
 validation-output/
+assets/generals_library/data/
+__pycache__/

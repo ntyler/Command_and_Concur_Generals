@@ -71,24 +71,14 @@ func _ready() -> void:
 
 
 func _build_visual() -> void:
-	# The fuselage is inside the authoritative radius; rotor/tail are decoration.
-	_add_box(Vector3(0.56, 0.4, 0.72), Vector3.ZERO, Color("42c5cc"))
-	_add_box(Vector3(0.48, 0.22, 0.3), Vector3(0, 0.06, -0.26), Color("b3e7df"))
-	_add_box(Vector3(0.13, 0.14, 0.78), Vector3(0, 0.04, 0.6), Color("42c5cc"))
-	_add_box(Vector3(0.58, 0.055, 0.18), Vector3(0, 0.08, 0.86), Color("ffd680"))
-	_add_box(Vector3(0.08, 0.08, 0.66), Vector3(-0.3, -0.27, 0.01), Color("263c49"))
-	_add_box(Vector3(0.08, 0.08, 0.66), Vector3(0.3, -0.27, 0.01), Color("263c49"))
+	var model := GeneralsVisuals.create("helicopter", Vector3(1.9, 0.7, 2.6), owner_id, true)
+	_visual.add_child(model)
 	_rotor = Node3D.new()
-	_rotor.position.y = 0.3
+	_rotor.position = Vector3(0, 0.27, -0.24)
 	_visual.add_child(_rotor)
-	var blade := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(1.75, 0.035, 0.11)
-	blade.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("263c49")
-	blade.material_override = material
-	_rotor.add_child(blade)
+	# Keep the existing cosmetic rotor speed; attach the original main rotor.
+	for part in model.find_children("PROPELLER01*", "MeshInstance3D", true, false) + model.find_children("AVCOMANCHE_PROP*", "MeshInstance3D", true, false):
+		part.reparent(_rotor, true)
 
 
 func is_airborne_unit() -> bool:
