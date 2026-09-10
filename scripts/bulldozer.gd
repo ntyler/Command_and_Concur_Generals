@@ -31,17 +31,14 @@ func _ready() -> void:
 
 
 func _build_visual() -> void:
-	# Original tracked tractor: squat cab, two treads and a broad angled blade.
-	# Visual detail does not change the inherited unit capsule or recovery settings.
-	_add_box(Vector3(0.76, 0.28, 1.16), Vector3(0, 0.4, 0.02), TeamRules.team_color(owner_id))
-	_add_box(Vector3(0.56, 0.55, 0.56), Vector3(0, 0.79, 0.14), Color("e8bd60"))
-	_add_box(Vector3(0.46, 0.24, 0.025), Vector3(0, 0.87, -0.15), Color("264552"))
-	_add_box(Vector3(0.7, 0.1, 0.68), Vector3(0, 1.1, 0.12), TeamRules.team_color(owner_id))
-	for x in [-0.43, 0.43]:
-		_add_box(Vector3(0.24, 0.3, 1.28), Vector3(x, 0.25, 0.05), Color("263c49"))
-		_add_box(Vector3(0.1, 0.12, 0.57), Vector3(x * 0.72, 0.3, -0.54), Color("c78d42"))
-	_add_box(Vector3(1.18, 0.43, 0.15), Vector3(0, 0.3, -0.84), Color("e8bd60"))
-	_add_box(Vector3(1.2, 0.07, 0.2), Vector3(0, 0.105, -0.88), Color("a0b9b5"))
+	# Keep the recipe's controller-only scene; the model scene is editor-viewable.
+	var model := load("res://scenes/bulldozer_model.tscn").instantiate() as Node3D
+	_visual.add_child(model)
+	for part in model.find_children("HOUSECOLOR*", "MeshInstance3D", true, false):
+		var mesh := part as MeshInstance3D
+		var material := mesh.get_active_material(0).duplicate() as StandardMaterial3D
+		material.albedo_color = TeamRules.team_color(owner_id)
+		mesh.material_override = material
 
 
 func move_to(destination: Vector3, combat_pursuit: bool = false, preserve_attack_move: bool = false) -> bool:

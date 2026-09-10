@@ -1,0 +1,32 @@
+{
+  "model": "AVCONSTDOZ_A",
+  "pose": "static hierarchy rest pose",
+  "length": 1.85,
+  "meshes": 10,
+  "vertices": 566,
+  "triangles": 312,
+  "omitted": [
+    "HEADLIGHT01 additive beam",
+    "animation",
+    "particles",
+    "damaged variants"
+  ],
+  "sources": [
+    {
+      "archive": "W3D.big",
+      "entry": "Art\\W3D\\AVCONSTDOZ_A.W3D",
+      "sha256": "8a2498951b58c6c31c0013f72ac42e4390359586ba1b9c128615c2dfd5218c66"
+    },
+    {
+      "archive": "Textures.big",
+      "entry": "Art\\Textures\\avconstdoz.dds",
+      "sha256": "3e98173b3e808d5b06739185b2010bb8b0657a69d2d85c98ced37e8cd92c3afa"
+    },
+    {
+      "archive": "Textures.big",
+      "entry": "Art\\Textures\\housecolor2.dds",
+      "sha256": "bb1ebe8640ef4bf34d8ea2811db0b602dd3928a230f9cb3afb202c21c808b183"
+    }
+  ],
+  "output_sha256": "b0b6d582e7d0f140b1059d522d23be507fe4bb7a09b380b999ecbc395e57bef8"
+}
