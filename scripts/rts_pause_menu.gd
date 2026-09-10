@@ -2,7 +2,7 @@ class_name RTSPauseMenu
 extends CanvasLayer
 ## Sole match Escape owner. GUI-consumed keys retain their existing owner.
 
-enum Confirmation { NONE, RESTART, QUIT }
+enum Confirmation { NONE, RESTART, QUIT, HOME }
 
 var field: BaseAssaultField
 var overlay: ColorRect
@@ -12,6 +12,7 @@ var confirmation: Confirmation = Confirmation.NONE
 var confirmation_label: Label
 var resume_button: Button
 var restart_button: Button
+var home_button: Button
 var quit_button: Button
 var confirm_button: Button
 var cancel_button: Button
@@ -55,6 +56,7 @@ func _ready() -> void:
 	column.add_child(menu_panel)
 	resume_button = _button(menu_panel, "Resume · Esc", field.resume_match)
 	restart_button = _button(menu_panel, "Restart Match…", request_confirmation.bind(Confirmation.RESTART))
+	home_button = _button(menu_panel, "Return to Home…", request_confirmation.bind(Confirmation.HOME))
 	quit_button = _button(menu_panel, "Quit to Desktop…", request_confirmation.bind(Confirmation.QUIT))
 	confirmation_panel = VBoxContainer.new()
 	confirmation_panel.add_theme_constant_override("separation", 14)
@@ -101,6 +103,9 @@ func request_confirmation(kind: Confirmation) -> void:
 	confirmation = kind
 	confirmation_label.text = "Restart this match?\nYour current match will be lost." if kind == Confirmation.RESTART else "Quit to Desktop?\nYour current match will be lost."
 	confirm_button.text = "Restart Match" if kind == Confirmation.RESTART else "Quit to Desktop"
+	if kind == Confirmation.HOME:
+		confirmation_label.text = "Return to Home?\nYour current match will be lost."
+		confirm_button.text = "Return to Home"
 	menu_panel.hide()
 	confirmation_panel.show()
 	cancel_button.grab_focus()
@@ -120,6 +125,9 @@ func confirm_action() -> void:
 			confirmation_label.text = "Restart could not load the match.\nGo back to resume or try again."
 	elif confirmation == Confirmation.QUIT:
 		get_tree().quit()
+	elif confirmation == Confirmation.HOME:
+		if not field.return_to_home():
+			confirmation_label.text = "Home could not be opened.\nGo back to resume or try again."
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

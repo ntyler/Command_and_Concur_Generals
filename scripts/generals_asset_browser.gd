@@ -16,6 +16,8 @@ var distance: float = 6.0
 var dragging: bool = false
 var target := Vector3(0, 0.8, 0)
 var selected_name: String = ""
+var home_button: Button
+var _leaving: bool = false
 
 
 func _ready() -> void:
@@ -71,8 +73,11 @@ func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
-	panel.position = Vector2(16, 16)
-	panel.size = Vector2(350, 768)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	panel.offset_left = 16
+	panel.offset_right = 366
+	panel.offset_top = 16
+	panel.offset_bottom = -16
 	layer.add_child(panel)
 	var margin := MarginContainer.new()
 	for edge in ["left", "right", "top", "bottom"]:
@@ -85,6 +90,11 @@ func _build_ui() -> void:
 	title.text = "GENERALS OBJECT LIBRARY"
 	title.add_theme_font_size_override("font_size", 20)
 	column.add_child(title)
+	home_button = Button.new()
+	home_button.text = "← Home"
+	home_button.custom_minimum_size.y = 36
+	home_button.pressed.connect(_return_home)
+	column.add_child(home_button)
 	var featured := HBoxContainer.new()
 	column.add_child(featured)
 	for item in [["Dozer", "avconstdoz_a"], ["Battleship", "avbattlesh"], ["Carrier", "psaircarrier"]]:
@@ -104,17 +114,17 @@ func _build_ui() -> void:
 	count_label = Label.new()
 	column.add_child(count_label)
 	list = ItemList.new()
-	list.custom_minimum_size = Vector2(320, 330)
+	list.custom_minimum_size = Vector2(320, 180)
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list.item_selected.connect(_selected)
 	column.add_child(list)
 	details = Label.new()
-	details.custom_minimum_size = Vector2(320, 165)
+	details.custom_minimum_size = Vector2(320, 145)
 	details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	details.add_theme_font_size_override("font_size", 14)
 	column.add_child(details)
 	var controls := Label.new()
-	controls.text = "Drag model to orbit · Scroll to zoom\nEsc to close"
+	controls.text = "Drag model to orbit · Scroll to zoom\nEsc to return home"
 	controls.position = Vector2(405, 735)
 	controls.add_theme_font_size_override("font_size", 18)
 	layer.add_child(controls)
@@ -200,7 +210,10 @@ func _update_camera() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_tree().quit()
+		get_viewport().set_input_as_handled()
+		if not event.echo:
+			_return_home()
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			dragging = event.pressed
@@ -213,6 +226,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		yaw -= event.relative.x * 0.008
 		pitch = clampf(pitch + event.relative.y * 0.006, 0.06, 1.3)
 		_update_camera()
+
+
+func _return_home() -> void:
+	if _leaving:
+		return
+	_leaving = true
+	if get_tree().change_scene_to_file("res://scenes/home_screen.tscn") != OK:
+		_leaving = false
+		details.text = "Home could not be opened. Please try again."
 
 
 func _capture_examples(naval: bool = false) -> void:

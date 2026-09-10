@@ -8,7 +8,8 @@ AI-prompt map generation. This is an expansion beyond the previous visual import
 
 **The full game has not been ported or verified.** The current Godot controllers
 still implement the prototype's rules. Copying original INI, map and window files
-does not make their C++ behaviors execute in Godot. The home screen, map editor,
+does not make their C++ behaviors execute in Godot. The home screen now connects
+the playable prototype and Object Library. Original skirmish setup, the map editor,
 AI generator and complete original rules are still outstanding.
 
 ## Runtime decision — Godot with original behavior
@@ -191,6 +192,16 @@ python tests/test_generals_imports.py
 
 **Full-game parity remains NOT VERIFIED.** Original command execution, complete
 economy/production/research/combat, AI opcode handlers and script scheduling,
-pathfinding, fog, map semantics, skirmish setup, menus/login, naval integration,
+pathfinding, fog, map semantics, skirmish setup, remaining menus/login, naval integration,
 save/load, multiplayer and the manual/AI map tools remain outstanding. The
 current playable prototype and automatic-harvesting implementation are preserved.
+
+## Home screen
+
+Normal launch and Godot F5 now open `scenes/home_screen.tscn`. Play starts the
+existing Fortified Assault match; Object Library opens the imported collection.
+Pause offers a confirmed Return to Home, the result screen offers Home, and the
+library offers a Home button and Escape. The new screen does not change match
+rules or certify original-game AI. Original skirmish setup and both manual and
+AI map-authoring controls are visibly unavailable. No login or fake generator
+is presented as implemented. See [home-screen validation](home-screen.md).

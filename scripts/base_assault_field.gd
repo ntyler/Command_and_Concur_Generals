@@ -24,6 +24,7 @@ var objective_label: Label
 var result_overlay: ColorRect
 var result_label: Label
 var restart_button: Button
+var home_button: Button
 var help_panel: RTSHelpPanel
 var pause_menu: RTSPauseMenu
 
@@ -62,6 +63,7 @@ func register_building(building: RTSBuilding) -> void:
 
 
 func _ready() -> void:
+	get_window().title = "Fieldwork — Match"
 	# A test/host may itself process while paused; the match always pauses.
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 	super._ready()
@@ -255,12 +257,22 @@ func _clear_uncommitted_input() -> void:
 func restart_match() -> bool:
 	if (result == Result.RUNNING and not manual_pause_active) or _restarting or not is_inside_tree() or is_queued_for_deletion():
 		return false
+	return _leave_match(restart_scene)
+
+
+func return_to_home() -> bool:
+	if (result == Result.RUNNING and not manual_pause_active) or _restarting or not is_inside_tree() or is_queued_for_deletion():
+		return false
+	return _leave_match("res://scenes/home_screen.tscn")
+
+
+func _leave_match(destination: String) -> bool:
 	_restarting = true
 	_clear_uncommitted_input()
 	if is_instance_valid(control_groups):
 		control_groups.clear_groups()
 	var tree := get_tree()
-	var error := tree.change_scene_to_file(restart_scene)
+	var error := tree.change_scene_to_file(destination)
 	if error != OK:
 		_restarting = false
 		return false
@@ -331,4 +343,9 @@ func _build_match_ui() -> void:
 	restart_button.custom_minimum_size = Vector2(320, 56)
 	restart_button.pressed.connect(restart_match)
 	column.add_child(restart_button)
+	home_button = Button.new()
+	home_button.text = "Return to Home"
+	home_button.custom_minimum_size = Vector2(320, 52)
+	home_button.pressed.connect(return_to_home)
+	column.add_child(home_button)
 	result_overlay.hide()
